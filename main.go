@@ -8,17 +8,16 @@ import (
 	"sync"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 )
 
 var flagChan = make(chan bool)
 
 const (
-	MAP_SIZE_X       uint = 500
-	MAP_SIZE_Y       uint = 200
-	TICK_INTERVAL_MS      = 50
-	MAP_RENDER_MS         = 50
+	MAP_SIZE_X       uint = 1542
+	MAP_SIZE_Y       uint = 512
+	TICK_INTERVAL_MS      = 1000
+	MAP_RENDER_MS         = 1000
 ) //建立链接发送数据
 
 const (
@@ -45,10 +44,14 @@ var UP = websocket.Upgrader{
 } //websocket设置
 
 var (
-	clients      = make(map[string]*Client)
-	clientsMu    sync.Mutex
-	spawnTanks   []*Tank
-	spawnTanksMu sync.Mutex
+	clients         = make(map[string]*Client)
+	clientsMu       sync.Mutex
+	spawnTanks      []*Tank
+	spawnTanksMu    sync.Mutex
+	activeBullets   []*Bullet
+	activeBulletsMu sync.Mutex
+	usernames       []string
+	usernameMu      sync.Mutex
 )
 
 type WebMessage struct {
@@ -65,13 +68,14 @@ type MapConfig struct {
 	MapSizeY     uint   `json:"map_size_y"`
 	TickInterval int    `json:"tick_interval_ms"`
 	MapRenderMS  int    `json:"map_render_ms"`
-	ServerID     string `json:"ws_server_id"`
+	ServerID     string `json:"username"`
 }
 
 // 坦克状态
 type Tank struct {
-	LocalX      uint   `json:"x"`
-	LocalY      uint   `json:"y"`
+	LocalX uint `json:"x"`
+	LocalY uint `json:"y"`
+	//Theta       float64 `json:theta`
 	Reload      uint   `json:"reload"`
 	Trigger     bool   `json:"trigger"`
 	GunFacing   byte   `json:"gunfacing"`
@@ -91,11 +95,11 @@ type GameState struct {
 
 // 子弹状态
 type Bullet struct {
-	Tank   *Tank
-	LocalX uint
-	LocalY uint
-	facing byte
-	Speed  float64
+	Tank   string  `json:"shoter"`
+	LocalX uint    `json:"x"`
+	LocalY uint    `json:"y"`
+	Facing byte    `json:"orientation"`
+	Speed  float64 `json:"speed"`
 }
 
 // 客户端信息
@@ -114,9 +118,14 @@ type OperatePayload struct {
 	Right  bool
 	Action string
 }
-type TestPayload struct {
-	test    string
-	success bool
+
+type RequestPayload struct {
+	Username string `json:"username"`
+	Success  bool   `json:"success"`
+}
+
+type NoticePayload struct {
+	Notice string `json:"notice"`
 }
 
 // 地图数据
@@ -131,30 +140,52 @@ func main() {
 	go mapRenderloop()
 	go broadcastLoop()
 
-	log.Println("WebSocket server started on :8888")
-	if err := http.ListenAndServe("0.0.0.0:8888", nil); err != nil {
+	log.Println("WebSocket server started on :8889")
+	if err := http.ListenAndServe("0.0.0.0:8889", nil); err != nil {
 		log.Fatal("ListenAndServe: ", err)
 	}
 }
 
-// func RegisterPayloadType[T any](msgType byte) {
-// 	var t T
-// 	payloadTypeRegistry[msgType] = reflect.TypeOf(t)
-// }
-
-// 客户端建立连接
 func handler(w http.ResponseWriter, r *http.Request) {
-	connID := uuid.New().String()
 	conn, err := UP.Upgrade(w, r, nil)
 	if err != nil {
 		log.Println("Upgrade error:", err)
 		return
 	}
 
+	notice := NoticePayload{
+		Notice: "websocket connect success",
+	}
+
+	data, err := rePackWebMessageJson(0, notice, "perpartext")
+	if err != nil {
+		log.Println("Failed to marshal notice payload:", err)
+		return
+	}
+	conn.WriteMessage(websocket.TextMessage, data)
+
+	timeout := time.After(60 * time.Second)
+	tick := time.NewTicker(100 * time.Millisecond)
+	defer tick.Stop()
+
+	var username string // 记录分配的 username
+
+	// 等待直到满足条件或超时
+	if ok, u := waitForCondition(conn, tick.C, timeout); ok {
+		username = u
+	} else {
+		log.Println("⏳ 超时，条件未达成")
+		return
+	}
+
+	// 确保连接断开时清理用户名
+
+	log.Println("执行后续逻辑...")
+	// 后续逻辑...
 	tank := allocateTank()
 	if tank == nil {
-		log.Printf("No available spawn point for %s\n", connID)
-		data, err := rePackWebMessageJson(0, []byte("No available spawn point"), connID)
+		log.Printf("No available spawn point for %s\n", username)
+		data, err := rePackWebMessageJson(0, []byte("No available spawn point"), username)
 		if err != nil {
 			log.Println("Failed to marshal game state:", err)
 			return
@@ -165,18 +196,18 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	client := &Client{
-		ID:         connID,
+		ID:         username,
 		Conn:       conn,
 		Tank:       tank,
 		LastActive: time.Now(),
 	}
 	client.Tank.ID = client.ID //每个链接占用一个坦克
 	clientsMu.Lock()
-	clients[connID] = client
+	clients[username] = client
 	clientsMu.Unlock()
 	sendConfig(conn, client.ID)
 	log.Printf("New connection: %s at (%d,%d) facing %d\n",
-		connID, tank.LocalX, tank.LocalY, tank.Orientation)
+		username, tank.LocalX, tank.LocalY, tank.Orientation)
 	printTankShape(tank)
 	go readMessages(client)
 }
@@ -188,7 +219,7 @@ func readMessages(client *Client) {
 		clientsMu.Lock()
 		delete(clients, client.ID)
 		clientsMu.Unlock()
-
+		removeUsername(client.ID)
 		if client.Tank != nil {
 			freeTank(client.Tank)
 			log.Printf("Freed spawn for %s\n", client.ID)
@@ -200,7 +231,7 @@ func readMessages(client *Client) {
 	for {
 		_, msg, err := client.Conn.ReadMessage()
 		if err != nil {
-			log.Printf("Connection %s error: %v\n", client.ID, err)
+			log.Printf("test Connection %s error: %v\n", client.ID, err)
 			break
 		}
 
@@ -219,10 +250,10 @@ func readMessages(client *Client) {
 				client.Tank.GunFacing = moveDir
 			}
 			log.Printf("tank %s try move to %d", client.ID, client.Tank.Orientation)
-			// if m.Action == "fire" && client.Tank.Reload == 0 { //接收到开火命令且已经装填完毕后将扳机置于开
-			// 	log.Printf("tank %s try fire and already Reload", client.ID)
-			// 	client.Tank.Trigger = true
-			// }
+			if op.Action == "fire" && client.Tank.Reload == 0 { //接收到开火命令且已经装填完毕后将扳机置于开
+				log.Printf("tank %s try fire and already Reload", client.ID)
+				client.Tank.Trigger = true
+			}
 			printTankShape(client.Tank)
 		} else {
 			log.Printf("payload 不是 OperatePayload，而是：%T", payload)
@@ -241,19 +272,23 @@ func mapRenderloop() {
 		// 遍历坦克，把每个活跃的坦克标记到地图上
 
 		spawnTanksMu.Lock()
+		activeBulletsMu.Lock()
 		for _, t := range spawnTanks {
 			//坦克移动
 			if t.Status == StatusTaken {
 				markTankOnMap(t, 0)
 				moveTank(t)
-
+				// if t.Trigger { //更新坦克状态时，如果坦克扳机按下则发射子弹
+				// 	activeBullets = append(activeBullets, openFire(t))
+				// }
 			}
 			//发射子弹
-			// if t.Trigger {
-			// 	openFire(t)
-			// }
 		}
+		// for _, b := range activeBullets {
+
+		// }
 		spawnTanksMu.Unlock()
+		activeBulletsMu.Unlock()
 		flagChan <- true
 	}
 
@@ -288,11 +323,11 @@ func BroadcastGameState() {
 }
 
 // 开火生成子弹
-func openFire(t *Tank) Bullet {
+func openFire(t *Tank) *Bullet {
 	var bullet Bullet
-	bullet.facing = t.GunFacing
+	bullet.Facing = t.GunFacing
 	bullet.Speed = 2
-	bullet.Tank = t
+	bullet.Tank = t.ID
 	switch t.GunFacing {
 	case DirDown:
 		bullet.LocalX = t.LocalX
@@ -327,7 +362,7 @@ func openFire(t *Tank) Bullet {
 	t.Trigger = false
 	printTankShape(t)
 	log.Printf("shoting bullet=%+v\n", bullet)
-	return bullet
+	return &bullet
 }
 
 // 清空地图
@@ -447,7 +482,7 @@ func moveTank(t *Tank) {
 	// 标记新位置
 	//markTankOnMap(t, 1)
 
-	log.Printf("tank moved to (%d,%d) facing %d", t.LocalX, t.LocalY, t.Orientation)
+	log.Printf("tank %s moved to (%d,%d) facing %d", t.ID, t.LocalX, t.LocalY, t.Orientation)
 }
 
 // 地图展示
@@ -620,8 +655,8 @@ func GetMap() []byte {
 // 构建游戏状态结构体
 func BuildGameState() *GameState {
 	return &GameState{
-		Tanks: GetActiveTanks(),
-		// Bullets: GetActiveBullets(),  // 可以留空
+		Tanks:   GetActiveTanks(),
+		Bullets: activeBullets,
 		// Items: GetActiveItems(),
 		// Map: GetMap(),
 	}
@@ -726,10 +761,10 @@ func UnpackWebMessage(data []byte) (byte, string, interface{}, error) {
 			return 0, "", nil, err
 		}
 		payload = op
-		log.Printf("%+v", op)
-		log.Printf("%+v", payload)
+		//log.Printf("%+v", op)
+		//log.Printf("%+v", payload)
 	case 16:
-		var tp TestPayload
+		var tp RequestPayload
 		if err := json.Unmarshal(payloadBytes, &tp); err != nil {
 			return 0, "", nil, err
 		}
@@ -741,6 +776,7 @@ func UnpackWebMessage(data []byte) (byte, string, interface{}, error) {
 	return mes.Type, mes.ID, payload, nil
 }
 
+//func bullet
 // 生成地图快照字符串
 // func buildMapSnapshot() string {
 // 	var snapshot string
@@ -756,3 +792,96 @@ func UnpackWebMessage(data []byte) (byte, string, interface{}, error) {
 // 	}
 // 	return snapshot
 // }
+
+func waitForCondition(conn *websocket.Conn, tick <-chan time.Time, timeout <-chan time.Time) (bool, string) {
+	for {
+		select {
+		case <-timeout:
+			return false, ""
+
+		case <-tick:
+			ok, err, username := checkCondition(conn)
+			if err != nil {
+				log.Printf("读取或解析出错: %v", err)
+				continue
+			}
+			if ok {
+				return true, username
+			}
+		}
+	}
+}
+
+func checkCondition(conn *websocket.Conn) (bool, error, string) {
+	_, msg, err := conn.ReadMessage()
+	if err != nil {
+		return false, fmt.Errorf("connection error: %w", err), ""
+	}
+
+	_, _, payload, err := UnpackWebMessage(msg)
+	if err != nil {
+		return false, fmt.Errorf("failed to parse message: %w", err), ""
+	}
+
+	rp, ok := payload.(RequestPayload)
+	if !ok {
+		log.Printf("payload 不是 RequestPayload，而是：%T", payload)
+		return false, nil, ""
+	}
+
+	if rp.Success && isUsernameLegal(rp.Username) {
+		usernameMu.Lock()
+		usernames = append(usernames, rp.Username)
+		usernameMu.Unlock()
+		return true, nil, rp.Username
+	} else {
+		notice := NoticePayload{
+			Notice: "username is empty or already exists",
+		}
+
+		data, err := rePackWebMessageJson(0, notice, rp.Username)
+		if err != nil {
+			log.Println("Failed to marshal notice payload:", err)
+			return false, nil, ""
+		}
+		conn.WriteMessage(websocket.TextMessage, data)
+	}
+	return false, nil, ""
+}
+
+// 从 usernames 切片里删除 username
+func removeUsername(username string) {
+	usernameMu.Lock()
+	defer usernameMu.Unlock()
+
+	newList := make([]string, 0, len(usernames))
+	for _, u := range usernames {
+		if u != username {
+			newList = append(newList, u)
+		}
+	}
+	usernames = newList
+
+	log.Printf("已删除用户名: %s", username)
+}
+
+func isUsernameLegal(username string) bool {
+	// 先判断 username 是否为空
+	if username == "" {
+		return false
+	}
+
+	// 遍历现有的 usernames
+	for _, u := range usernames {
+		if u == "" {
+			continue
+		}
+		if u == username {
+			// 找到相同的
+			return false
+		}
+	}
+
+	// 非空且不重复
+	return true
+}
