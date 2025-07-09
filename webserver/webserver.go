@@ -1,0 +1,284 @@
+package webserver
+
+import (
+	"encoding/json"
+	"fmt"
+	"log"
+	"net/http"
+	"time"
+
+	gamemap "example.com/lite_demo/map"
+	"example.com/lite_demo/model"
+	"github.com/gorilla/websocket"
+)
+
+func Handler(w http.ResponseWriter, r *http.Request) {
+	conn, err := model.UP.Upgrade(w, r, nil)
+	if err != nil {
+		log.Println("Upgrade error:", err)
+		return
+	}
+
+	notice := model.NoticePayload{
+		Notice: "websocket connect success",
+	}
+
+	data, err := RePackWebMessageJson(0, notice, "perpartext")
+	if err != nil {
+		log.Println("Failed to marshal notice payload:", err)
+		return
+	}
+	conn.WriteMessage(websocket.TextMessage, data)
+
+	timeout := time.After(60 * time.Second)
+	tick := time.NewTicker(100 * time.Millisecond)
+	defer tick.Stop()
+
+	var username string // 记录分配的 username
+
+	// 等待直到满足条件或超时
+	if ok, u := WaitForCondition(conn, tick.C, timeout); ok {
+		username = u
+	} else {
+		log.Println("⏳ 超时，条件未达成")
+		return
+	}
+
+	// 确保连接断开时清理用户名
+
+	log.Println("执行后续逻辑...")
+	// 后续逻辑...
+	tank := allocateTank()
+	if tank == nil {
+		log.Printf("No available spawn point for %s\n", username)
+		data, err := RePackWebMessageJson(0, []byte("No available spawn point"), username)
+		if err != nil {
+			log.Println("Failed to marshal game state:", err)
+			return
+		}
+		conn.WriteMessage(websocket.TextMessage, data)
+		conn.Close()
+		return
+	}
+
+	client := &model.Client{
+		ID:         username,
+		Conn:       conn,
+		Tank:       tank,
+		LastActive: time.Now(),
+	}
+	client.Tank.ID = client.ID //每个链接占用一个坦克
+	model.ClientsMu.Lock()
+	model.Clients[username] = client
+	model.ClientsMu.Unlock()
+	sendConfig(conn, client.ID)
+	log.Printf("New connection: %s at (%d,%d) facing %d\n",
+		username, tank.LocalX, tank.LocalY, tank.Orientation)
+	printTankShape(tank)
+	go readMessages(client)
+}
+
+// 处理客户端指令
+func readMessages(client *model.Client) {
+	defer func() {
+		client.Conn.Close()
+		model.ClientsMu.Lock()
+		delete(model.Clients, client.ID)
+		model.ClientsMu.Unlock()
+		removeUsername(client.ID)
+		if client.Tank != nil {
+			freeTank(client.Tank)
+			log.Printf("Freed spawn for %s\n", client.ID)
+		}
+
+		log.Printf("Connection %s closed\n", client.ID)
+	}()
+
+	for {
+		_, msg, err := client.Conn.ReadMessage()
+		if err != nil {
+			log.Printf("test Connection %s error: %v\n", client.ID, err)
+			break
+		}
+
+		_, _, payload, err := UnpackWebMessage(msg)
+		if err != nil {
+			log.Printf("Failed to parse JSON from %s: %v", client.ID, err)
+			continue
+		}
+		if op, ok := payload.(model.OperatePayload); ok {
+			moveDir := parseDirection(op.Up, op.Down, op.Left, op.Right)
+
+			client.LastActive = time.Now()
+			client.Tank.Orientation = moveDir
+
+			if moveDir != model.DirNone {
+				client.Tank.GunFacing = moveDir
+			}
+			log.Printf("tank %s try move to %d", client.ID, client.Tank.Orientation)
+			if op.Action == "fire" && client.Tank.Reload == 0 { //接收到开火命令且已经装填完毕后将扳机置于开
+				log.Printf("tank %s try fire and already Reload", client.ID)
+				client.Tank.Trigger = true
+			}
+			printTankShape(client.Tank)
+		} else {
+			log.Printf("payload 不是 OperatePayload，而是：%T", payload)
+		}
+
+		//moveTank(client.Tank, moveDir)
+	}
+}
+
+func BroadcastLoop() {
+	ticker := time.NewTicker(model.TICK_INTERVAL_MS * time.Millisecond)
+	defer ticker.Stop()
+
+	for range ticker.C {
+		BroadcastGameState()
+		<-model.FlagChan
+	}
+}
+
+// 广播地图状态
+func BroadcastGameState() {
+	state := BuildGameState()
+	data, err := RePackWebMessageJson(2, state, "broadcast message gamer")
+	if err != nil {
+		log.Println("Failed to marshal game state:", err)
+		return
+	}
+	model.ClientsMu.Lock()
+	defer model.ClientsMu.Unlock()
+	for _, c := range model.Clients {
+		if err := c.Conn.WriteMessage(websocket.TextMessage, data); err != nil {
+			log.Printf("Error sending to %s: %v\n", c.ID, err)
+		}
+	}
+}
+
+// 链接建立时 发送所需数据
+func sendConfig(conn *websocket.Conn, id string) {
+
+	config := model.MapConfig{
+		Map:          gamemap.GetMap(),
+		MapSizeX:     model.MAP_SIZE_X,
+		MapSizeY:     model.MAP_SIZE_Y,
+		TickInterval: model.TICK_INTERVAL_MS,
+		MapRenderMS:  model.MAP_RENDER_MS,
+		ServerID:     id,
+	}
+	data, err := RePackWebMessageJson(1, config, id)
+	if err != nil {
+		log.Println("Failed to marshal game state:", err)
+		return
+	}
+	err = conn.WriteMessage(websocket.TextMessage, data)
+	if err != nil {
+		log.Println("write message error:", err)
+		return
+	}
+}
+
+func RePackWebMessageJson(msgType byte, payload interface{}, id string) ([]byte, error) {
+	mes := model.WebMessage{
+		Type: msgType,
+		//TimeStamp: time.Now().UnixNano(),
+		ID:      id,
+		Payload: payload,
+	}
+	return json.Marshal(mes)
+}
+
+func UnpackWebMessage(data []byte) (byte, string, interface{}, error) {
+	var mes model.WebMessage
+	err := json.Unmarshal(data, &mes)
+	if err != nil {
+		return 0, "", nil, err
+	}
+
+	// 因为 Payload 是 interface{}，它现在是 map[string]interface{}
+	// 所以我们先把它再 Marshal 一次，得到原始 JSON
+	payloadBytes, err := json.Marshal(mes.Payload)
+	if err != nil {
+		return 0, "", nil, err
+	}
+
+	var payload interface{}
+
+	switch mes.Type {
+	case 15:
+		var op model.OperatePayload
+		if err := json.Unmarshal(payloadBytes, &op); err != nil {
+			return 0, "", nil, err
+		}
+		payload = op
+		//log.Printf("%+v", op)
+		//log.Printf("%+v", payload)
+	case 16:
+		var tp model.RequestPayload
+		if err := json.Unmarshal(payloadBytes, &tp); err != nil {
+			return 0, "", nil, err
+		}
+		payload = tp
+	default:
+		return 0, "", nil, fmt.Errorf("unknown message type: %d", mes.Type)
+	}
+
+	return mes.Type, mes.ID, payload, nil
+}
+
+func WaitForCondition(conn *websocket.Conn, tick <-chan time.Time, timeout <-chan time.Time) (bool, string) {
+	for {
+		select {
+		case <-timeout:
+			return false, ""
+
+		case <-tick:
+			ok, err, username := checkCondition(conn)
+			if err != nil {
+				log.Printf("读取或解析出错: %v", err)
+				continue
+			}
+			if ok {
+				return true, username
+			}
+		}
+	}
+}
+
+func checkCondition(conn *websocket.Conn) (bool, error, string) {
+	_, msg, err := conn.ReadMessage()
+	if err != nil {
+		return false, fmt.Errorf("connection error: %w", err), ""
+	}
+
+	_, _, payload, err := UnpackWebMessage(msg)
+	if err != nil {
+		return false, fmt.Errorf("failed to parse message: %w", err), ""
+	}
+
+	rp, ok := payload.(model.RequestPayload)
+	if !ok {
+		log.Printf("payload 不是 RequestPayload，而是：%T", payload)
+		return false, nil, ""
+	}
+
+	if rp.Success && isUsernameLegal(rp.Username) {
+		model.UsernameMu.Lock()
+		model.Usernames = append(model.Usernames, rp.Username)
+		model.UsernameMu.Unlock()
+		return true, nil, rp.Username
+	} else {
+		notice := model.NoticePayload{
+			Notice: "username is empty or already exists",
+		}
+
+		data, err := RePackWebMessageJson(0, notice, rp.Username)
+		if err != nil {
+			log.Println("Failed to marshal notice payload:", err)
+			return false, nil, ""
+		}
+		conn.WriteMessage(websocket.TextMessage, data)
+	}
+	return false, nil, ""
+}
