@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>实时地图</title>
+<style>
+  body {
+    background: white;
+    color: black;
+    font-family: monospace;
+    white-space: pre;
+    font-size: 12px;
+  }
+</style>
+</head>
+<body>
+<pre id="map"></pre>
+<script>
+  const ws = new WebSocket("ws://" + location.host + "/mapws");
+
+  ws.onmessage = (event) => {
+    document.getElementById("map").textContent = event.data;
+  };
+
+  ws.onclose = () => {
+    console.log("WebSocket closed");
+  };
+</script>
+</body>
+</html>
