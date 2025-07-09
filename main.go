@@ -17,7 +17,7 @@ var flagChan = make(chan bool)
 const (
 	MAP_SIZE_X       uint = 500
 	MAP_SIZE_Y       uint = 200
-	TICK_INTERVAL_MS      = 5000
+	TICK_INTERVAL_MS      = 50
 	MAP_RENDER_MS         = 50
 ) //建立链接发送数据
 
@@ -107,12 +107,16 @@ type Client struct {
 }
 
 // 客户端请求
-type Message struct {
-	Up     int    `json:"up"`
-	Down   int    `json:"down"`
-	Left   int    `json:"left"`
-	Right  int    `json:"right"`
-	Action string `json:"action"`
+type OperatePayload struct {
+	Up     bool
+	Down   bool
+	Left   bool
+	Right  bool
+	Action string
+}
+type TestPayload struct {
+	test    string
+	success bool
 }
 
 // 地图数据
@@ -132,6 +136,11 @@ func main() {
 		log.Fatal("ListenAndServe: ", err)
 	}
 }
+
+// func RegisterPayloadType[T any](msgType byte) {
+// 	var t T
+// 	payloadTypeRegistry[msgType] = reflect.TypeOf(t)
+// }
 
 // 客户端建立连接
 func handler(w http.ResponseWriter, r *http.Request) {
@@ -195,26 +204,30 @@ func readMessages(client *Client) {
 			break
 		}
 
-		var m Message
-		if err := json.Unmarshal(msg, &m); err != nil {
+		_, _, payload, err := UnpackWebMessage(msg)
+		if err != nil {
 			log.Printf("Failed to parse JSON from %s: %v", client.ID, err)
 			continue
 		}
-		//计算目标前进方位
-		moveDir := parseDirection(m.Up, m.Down, m.Left, m.Right)
+		if op, ok := payload.(OperatePayload); ok {
+			moveDir := parseDirection(op.Up, op.Down, op.Left, op.Right)
 
-		client.LastActive = time.Now()
-		client.Tank.Orientation = moveDir
+			client.LastActive = time.Now()
+			client.Tank.Orientation = moveDir
 
-		if moveDir != DirNone {
-			client.Tank.GunFacing = moveDir
+			if moveDir != DirNone {
+				client.Tank.GunFacing = moveDir
+			}
+			log.Printf("tank %s try move to %d", client.ID, client.Tank.Orientation)
+			// if m.Action == "fire" && client.Tank.Reload == 0 { //接收到开火命令且已经装填完毕后将扳机置于开
+			// 	log.Printf("tank %s try fire and already Reload", client.ID)
+			// 	client.Tank.Trigger = true
+			// }
+			printTankShape(client.Tank)
+		} else {
+			log.Printf("payload 不是 OperatePayload，而是：%T", payload)
 		}
-		log.Printf("tank %s try move to %d", client.ID, client.Tank.Orientation)
-		if m.Action == "fire" && client.Tank.Reload == 0 { //接收到开火命令且已经装填完毕后将扳机置于开
-			log.Printf("tank %s try fire and already Reload", client.ID)
-			client.Tank.Trigger = true
-		}
-		printTankShape(client.Tank)
+
 		//moveTank(client.Tank, moveDir)
 	}
 }
@@ -260,7 +273,7 @@ func broadcastLoop() {
 // 广播地图状态
 func BroadcastGameState() {
 	state := BuildGameState()
-	data, err := rePackWebMessageJson(3, state, "broadcast message gamer")
+	data, err := rePackWebMessageJson(2, state, "broadcast message gamer")
 	if err != nil {
 		log.Println("Failed to marshal game state:", err)
 		return
@@ -354,23 +367,23 @@ func printTankShape(t *Tank) {
 }
 
 // 指令转化为方向
-func parseDirection(up, down, left, right int) byte {
+func parseDirection(up, down, left, right bool) byte {
 	switch {
-	case up == 1 && left == 1 && down == 0 && right == 0:
+	case up && left && !down && !right:
 		return DirUpLeft
-	case up == 1 && right == 1 && down == 0 && left == 0:
+	case up && right && !down && !left:
 		return DirUpRight
-	case down == 1 && left == 1 && up == 0 && right == 0:
+	case down && left && !up && !right:
 		return DirDownLeft
-	case down == 1 && right == 1 && up == 0 && left == 0:
+	case down && right && !up && !left:
 		return DirDownRight
-	case up == 1 && down == 0:
+	case up && !down:
 		return DirUp
-	case down == 1 && up == 0:
+	case down && !up:
 		return DirDown
-	case left == 1 && right == 0:
+	case left && !right:
 		return DirLeft
-	case right == 1 && left == 0:
+	case right && !left:
 		return DirRight
 	default:
 		return DirNone
@@ -501,7 +514,7 @@ function updateTanks(tankList) {
     renderMap();
 }
 
-let ws = new WebSocket("ws://" + location.host + "/mapws");
+let ws = new WebSocket("ws://" + 192.168.10.123:8888 + "/mapws");
 ws.binaryType = "arraybuffer"; // 关键
 
 ws.onmessage = function(event) {
@@ -545,7 +558,7 @@ func wsMapHandler(w http.ResponseWriter, r *http.Request) {
 	sendConfig(conn, "viewer")
 	for range ticker.C {
 		state := BuildGameState()
-		data, err := rePackWebMessageJson(3, state, "broadcast message viewer")
+		data, err := rePackWebMessageJson(2, state, "broadcast message viewer")
 		if err != nil {
 			log.Println("Failed to marshal game state:", err)
 			return
@@ -688,6 +701,44 @@ func rePackWebMessageJson(msgType byte, payload interface{}, id string) ([]byte,
 		Payload: payload,
 	}
 	return json.Marshal(mes)
+}
+
+func UnpackWebMessage(data []byte) (byte, string, interface{}, error) {
+	var mes WebMessage
+	err := json.Unmarshal(data, &mes)
+	if err != nil {
+		return 0, "", nil, err
+	}
+
+	// 因为 Payload 是 interface{}，它现在是 map[string]interface{}
+	// 所以我们先把它再 Marshal 一次，得到原始 JSON
+	payloadBytes, err := json.Marshal(mes.Payload)
+	if err != nil {
+		return 0, "", nil, err
+	}
+
+	var payload interface{}
+
+	switch mes.Type {
+	case 15:
+		var op OperatePayload
+		if err := json.Unmarshal(payloadBytes, &op); err != nil {
+			return 0, "", nil, err
+		}
+		payload = op
+		log.Printf("%+v", op)
+		log.Printf("%+v", payload)
+	case 16:
+		var tp TestPayload
+		if err := json.Unmarshal(payloadBytes, &tp); err != nil {
+			return 0, "", nil, err
+		}
+		payload = tp
+	default:
+		return 0, "", nil, fmt.Errorf("unknown message type: %d", mes.Type)
+	}
+
+	return mes.Type, mes.ID, payload, nil
 }
 
 // 生成地图快照字符串
