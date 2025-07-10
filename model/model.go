@@ -15,6 +15,7 @@ const (
 	MAP_SIZE_Y       uint = 512
 	TICK_INTERVAL_MS      = 1000
 	MAP_RENDER_MS         = 1000
+	WAIT_REPLY_TIME       = 10
 ) //建立链接发送数据
 
 const (
@@ -51,6 +52,7 @@ var (
 	UsernameMu      sync.Mutex
 )
 
+// 通信壳
 type WebMessage struct {
 	Type byte `json:"type"`
 	//TimeStamp int64       `json:"time"`
@@ -63,6 +65,9 @@ type MapConfig struct {
 	Map          []byte `json:"map"`
 	MapSizeX     uint   `json:"map_size_x"`
 	MapSizeY     uint   `json:"map_size_y"`
+	TankCoordX   uint   `json:"tank_coord_x"`
+	TankCoordY   uint   `json:"tank_coord_y"`
+	Tankfacing   byte   `json:"tank_facing"`
 	TickInterval int    `json:"tick_interval_ms"`
 	MapRenderMS  int    `json:"map_render_ms"`
 	ServerID     string `json:"username"`

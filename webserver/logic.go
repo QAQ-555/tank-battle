@@ -8,6 +8,7 @@ import (
 	"example.com/lite_demo/model"
 )
 
+// 开火
 func openFire(t *model.Tank) *model.Bullet {
 	var bullet model.Bullet
 	bullet.Facing = t.GunFacing
@@ -50,6 +51,7 @@ func openFire(t *model.Tank) *model.Bullet {
 	return &bullet
 }
 
+// 打印坦克
 func printTankShape(t *model.Tank) {
 	dirSymbols := map[byte]string{
 		model.DirUp:        "↑",

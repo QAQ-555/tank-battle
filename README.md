@@ -14,23 +14,70 @@
 当前数据传递均由json进行，约定接收发送数据时使用以上结构的json
 tpye进行payload类型的标识
 type < 15 服务端发送数据
+
+type == 0 服务端发送提示数据
+```
+"payload": {
+        "notice": "username is empty or already exists"
+    }
+```
+服务端进行相应而发送的文本消息
+
 type == 1 链接建立时发送所需数据，id为目标客户端32字节长度字符串，payload见 [2.1](#21-链接建立)
 type == 2 游戏状态广播，id通用字符串如```broadcast message gamer```，payload见[2.2](#22-数据广播)
 
 type >= 15 客户端发送数据
 type == 15 坦克操作代码 操作tank时数据，id为发起客户端32字节长度字符串，payload见[3.1](#31-坦克操作指令)
 
+type == 16 注册请求，详见 [2.1](#21-链接建立)
+
 # 2 服务器消息payload
 ## 2.1 链接建立
-初次建立连接时，会收到由客户端发送来的地图与连接相关数据，如下所示
+通过接口进行websocket链接成功时，客户端会收到
+```json
+{
+    "type": 0,
+    "id": "perpartext",
+    "payload": {
+        "notice": "websocket connect success"
+    }
+}
+```
+代表客户端已经成功与服务端建立链接，之后需要在规定时间内发送
+```json
+{
+    "type": 16,
+    "id": "",
+    "payload": {
+        "username":"888", //string
+        "success":true    //发送true以注册
+    }
+}
+```
+username为玩家身份的唯一标识
+
+而因为重复等原因注册失败时会有
+```json
+{
+    "type": 0,
+    "id": "888",
+    "payload": {
+        "notice": "username is empty or already exists"
+    }
+}
+```
+成功注册时，会收到由客户端发送来的地图与连接相关数据，如下所示
 ```json
 "payload": {
     "map": "AQEBAAAAAAAAAAAAAAAAAAAAAAAAAAAA", //地图数据字节序列 [][]byte
     "map_size_x": 30,       //地图x轴长度   uint
     "map_size_y": 30,       //地图y轴长度   uint
+    "tank_coord_x": 1,      //tank坐标
+    "tank_coord_y": 1,
+    "tank_facing": 2,       //tank朝向
     "tick_interval_ms": 50, //服务端广播数据频率 单位ms
     "map_render_ms": 500,   //服务端数据刷新频率 单位ms
-    "ws_server_id": "966910f3-7bfc-4c3c-8ae9-7493f0bb2e69" //链接对应id string
+    "username": "QAQ-555"   //链接对应id string
 }
 ```
 客户端需要利用地图数据构建地图用于后续渲染，并保留id用于向服务端发送请求
@@ -41,9 +88,8 @@ map为[map_size_y][map_size_x]byte序列化生成，需要利用map_size_y与map
  (0,map_size_y)
  地图示意如上
 
-当ws_server_id为viewer
 ## 2.2 数据广播
-每间隔tick_interval_ms后，服务端会广播当前地图上所有元素的状态，客户端利用元素状态与地图构建完整游戏状态
+成功注册后，每间隔tick_interval_ms后，服务端会广播当前地图上所有元素的状态，客户端利用元素状态与地图构建完整游戏状态
 目前发送客户端所存储的完整坦克状态
 ```json
 "payload": {

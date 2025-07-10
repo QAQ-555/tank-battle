@@ -12,6 +12,7 @@ import (
 	"github.com/gorilla/websocket"
 )
 
+// 处理链接请求
 func Handler(w http.ResponseWriter, r *http.Request) {
 	conn, err := model.UP.Upgrade(w, r, nil)
 	if err != nil {
@@ -30,7 +31,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 	}
 	conn.WriteMessage(websocket.TextMessage, data)
 
-	timeout := time.After(60 * time.Second)
+	timeout := time.After(model.WAIT_REPLY_TIME * time.Second)
 	tick := time.NewTicker(100 * time.Millisecond)
 	defer tick.Stop()
 
@@ -39,12 +40,11 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 	// 等待直到满足条件或超时
 	if ok, u := WaitForCondition(conn, tick.C, timeout); ok {
 		username = u
-	} else {
+	} else if u == "timeout" {
 		log.Println("⏳ 超时，条件未达成")
+		conn.Close()
 		return
 	}
-
-	// 确保连接断开时清理用户名
 
 	log.Println("执行后续逻辑...")
 	// 后续逻辑...
@@ -71,7 +71,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 	model.ClientsMu.Lock()
 	model.Clients[username] = client
 	model.ClientsMu.Unlock()
-	sendConfig(conn, client.ID)
+	sendConfig(conn, client.ID, tank)
 	log.Printf("New connection: %s at (%d,%d) facing %d\n",
 		username, tank.LocalX, tank.LocalY, tank.Orientation)
 	printTankShape(tank)
@@ -129,6 +129,7 @@ func readMessages(client *model.Client) {
 	}
 }
 
+// 广播地图
 func BroadcastLoop() {
 	ticker := time.NewTicker(model.TICK_INTERVAL_MS * time.Millisecond)
 	defer ticker.Stop()
@@ -157,7 +158,7 @@ func BroadcastGameState() {
 }
 
 // 链接建立时 发送所需数据
-func sendConfig(conn *websocket.Conn, id string) {
+func sendConfig(conn *websocket.Conn, id string, t *model.Tank) {
 
 	config := model.MapConfig{
 		Map:          gamemap.GetMap(),
@@ -165,6 +166,9 @@ func sendConfig(conn *websocket.Conn, id string) {
 		MapSizeY:     model.MAP_SIZE_Y,
 		TickInterval: model.TICK_INTERVAL_MS,
 		MapRenderMS:  model.MAP_RENDER_MS,
+		TankCoordX:   t.LocalX,
+		TankCoordY:   t.LocalY,
+		Tankfacing:   t.GunFacing,
 		ServerID:     id,
 	}
 	data, err := RePackWebMessageJson(1, config, id)
@@ -179,6 +183,7 @@ func sendConfig(conn *websocket.Conn, id string) {
 	}
 }
 
+// 打包为webmessage
 func RePackWebMessageJson(msgType byte, payload interface{}, id string) ([]byte, error) {
 	mes := model.WebMessage{
 		Type: msgType,
@@ -189,6 +194,7 @@ func RePackWebMessageJson(msgType byte, payload interface{}, id string) ([]byte,
 	return json.Marshal(mes)
 }
 
+// 将webmessage解包取得payload
 func UnpackWebMessage(data []byte) (byte, string, interface{}, error) {
 	var mes model.WebMessage
 	err := json.Unmarshal(data, &mes)
@@ -227,31 +233,47 @@ func UnpackWebMessage(data []byte) (byte, string, interface{}, error) {
 	return mes.Type, mes.ID, payload, nil
 }
 
+// 验证
 func WaitForCondition(conn *websocket.Conn, tick <-chan time.Time, timeout <-chan time.Time) (bool, string) {
+	msgCh := make(chan []byte)
+	errCh := make(chan error)
+
+	// 独立 goroutine 持续读取消息
+	go func() {
+		for {
+			_, msg, err := conn.ReadMessage()
+			if err != nil {
+				errCh <- err
+				return
+			}
+			msgCh <- msg
+		}
+	}()
+
 	for {
 		select {
 		case <-timeout:
-			return false, ""
+			log.Println("timeout")
+			return false, "timeout"
 
 		case <-tick:
-			ok, err, username := checkCondition(conn)
-			if err != nil {
-				log.Printf("读取或解析出错: %v", err)
-				continue
-			}
+			log.Println("tick") // 这里你可以做一些定时任务
+
+		case err := <-errCh:
+			log.Printf("读取出错: %v", err)
+			return false, ""
+
+		case msg := <-msgCh:
+			ok, _, username := processMessage(conn, msg)
 			if ok {
+				log.Println("condition met")
 				return true, username
 			}
 		}
 	}
 }
 
-func checkCondition(conn *websocket.Conn) (bool, error, string) {
-	_, msg, err := conn.ReadMessage()
-	if err != nil {
-		return false, fmt.Errorf("connection error: %w", err), ""
-	}
-
+func processMessage(conn *websocket.Conn, msg []byte) (bool, error, string) {
 	_, _, payload, err := UnpackWebMessage(msg)
 	if err != nil {
 		return false, fmt.Errorf("failed to parse message: %w", err), ""
