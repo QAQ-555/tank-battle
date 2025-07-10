@@ -11,8 +11,8 @@ import (
 var FlagChan = make(chan bool)
 
 const (
-	MAP_SIZE_X       uint = 1542
-	MAP_SIZE_Y       uint = 512
+	MAP_SIZE_X       uint = 100
+	MAP_SIZE_Y       uint = 100
 	TICK_INTERVAL_MS      = 50
 	MAP_RENDER_MS         = 50
 	WAIT_REPLY_TIME       = 60

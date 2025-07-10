@@ -4,6 +4,7 @@ import (
 	"log"
 	"net/http"
 
+	gamemap "example.com/lite_demo/map"
 	"example.com/lite_demo/webserver"
 )
 
@@ -13,8 +14,8 @@ func main() {
 	webserver.InitSpawnTanks()
 	http.HandleFunc("/ws", webserver.Handler)
 
-	// http.HandleFunc("/map", mapHandler)
-	// http.HandleFunc("/mapws", wsMapHandler)
+	//http.HandleFunc("/map", mapHandler)
+	http.HandleFunc("/mapws", gamemap.WsMapHandler)
 	go webserver.MapRenderloop()
 	go webserver.BroadcastLoop()
 

@@ -1,0 +1,32 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Map Viewer</title>
+<style>
+  body {
+    background: white;
+    color: black;
+    font-family: monospace;
+    white-space: pre;
+    font-size: 12px;
+  }
+</style>
+</head>
+<body>
+<pre id="map">Loading map...</pre>
+
+<script>
+const mapElem = document.getElementById("map");
+
+const ws = new WebSocket("ws://" + location.host + ":8881/mapws");
+
+ws.onmessage = function(event) {
+    mapElem.textContent = event.data;
+};
+
+ws.onclose = function() {
+    mapElem.textContent = "WebSocket closed";
+};
+</script>
+</body>
+</html>

@@ -68,7 +68,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 	model.ClientsMu.Lock()
 	model.Clients[username] = client
 	model.ClientsMu.Unlock()
-	sendConfig(conn, client.ID, tank)
+	SendConfig(conn, client.ID, tank)
 	log.Printf("New connection: %s at (%d,%d) facing %d\n",
 		username, tank.LocalX, tank.LocalY, tank.Orientation)
 	printTankShape(tank)
@@ -163,7 +163,7 @@ func BroadcastGameState() {
 }
 
 // 链接建立时 发送所需数据
-func sendConfig(conn *websocket.Conn, id string, t *model.Tank) {
+func SendConfig(conn *websocket.Conn, id string, t *model.Tank) {
 
 	config := model.MapConfig{
 		Map:          gamemap.GetMap(),
