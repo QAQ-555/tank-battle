@@ -15,7 +15,7 @@ const (
 	MAP_SIZE_Y       uint = 512
 	TICK_INTERVAL_MS      = 1000
 	MAP_RENDER_MS         = 1000
-	WAIT_REPLY_TIME       = 10
+	WAIT_REPLY_TIME       = 60
 ) //建立链接发送数据
 
 const (

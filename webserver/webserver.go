@@ -32,21 +32,18 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 	}
 	conn.WriteMessage(websocket.TextMessage, data)
 	//倒计时请求username
-	timeout := time.After(model.WAIT_REPLY_TIME * time.Second)
-	tick := time.NewTicker(100 * time.Millisecond)
-	defer tick.Stop()
 
 	var username string // 记录分配的 username
 
-	// 等待直到满足条件或超时
-	if ok, u := WaitForCondition(conn, tick.C, timeout); ok {
-		username = u
-	} else if u == "timeout" {
-		log.Println("⏳ 超时，条件未达成")
-		conn.Close()
+	ok, username := WaitForCondition(conn)
+	if ok {
+		log.Println("成功获取 username:", username)
+	} else {
+		log.Println("⏳ 超时或失败，条件未达成")
+		conn.Close() // 关闭连接，确保释放资源
 		return
 	}
-	// 后续逻辑...
+	//后续逻辑...
 	tank := allocateTank()
 	if tank == nil {
 		log.Printf("No available spawn point for %s\n", username)
@@ -74,7 +71,6 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 	log.Printf("New connection: %s at (%d,%d) facing %d\n",
 		username, tank.LocalX, tank.LocalY, tank.Orientation)
 	printTankShape(tank)
-	fmt.Printf("read begin")
 	go readMessages(client)
 }
 
@@ -232,55 +228,92 @@ func UnpackWebMessage(data []byte) (byte, string, interface{}, error) {
 	return mes.Type, mes.ID, payload, nil
 }
 
-// 验证
-func WaitForCondition(conn *websocket.Conn, tick <-chan time.Time, timeout <-chan time.Time) (bool, string) {
-	msgCh := make(chan []byte)
-	errCh := make(chan error)
+func WaitForCondition(conn *websocket.Conn) (bool, string) {
+	// log.Println("[WaitForCondition] 开始")
 
-	// 独立 goroutine 持续读取消息
+	conn.SetReadDeadline(time.Now().Add(model.WAIT_REPLY_TIME * time.Second))
+	msgCh := make(chan []byte)
+	timeoutCh := make(chan bool)
+	closeCh := make(chan bool)
+
+	// 读取消息的 goroutine
 	go func() {
+		log.Println("[goroutine] 启动")
+		defer log.Println("[goroutine] 退出")
+
 		for {
+			// log.Println("[goroutine] 开始 ReadMessage")
 			_, msg, err := conn.ReadMessage()
 			if err != nil {
-				errCh <- err
+				// log.Println("[goroutine] ReadMessage 出错:", err)
+
+				// log.Println("[goroutine] 尝试写入 timeoutCh")
+				timeoutCh <- true
+				// log.Println("[goroutine] 写入 timeoutCh 成功")
+				// log.Println("[goroutine] 等待从 closeCh 读取以完成同步")
+				<-closeCh
+				// log.Println("[goroutine] 收到 closeCh:", val)
 				return
 			}
+
+			// log.Println("[goroutine] 读到消息:", string(msg))
+
+			// log.Println("[goroutine] 尝试写入 msgCh")
 			msgCh <- msg
-			return
+			// log.Println("[goroutine] 写入 msgCh 成功")
+
+			// log.Println("[goroutine] 等待从 closeCh 读取")
+			val := <-closeCh
+			// log.Println("[goroutine] 从 closeCh 收到:", val)
+			if val {
+				// log.Println("[goroutine] 收到 true，退出")
+				return
+			}
+			// log.Println("[goroutine] 收到 false，继续循环")
 		}
 	}()
 
+	defer func() {
+		// log.Println("[WaitForCondition] defer: 关闭 closeCh")
+		conn.SetReadDeadline(time.Time{})
+		close(closeCh)
+	}()
+
 	for {
+		// log.Println("[WaitForCondition] 等待 select")
 		select {
-		case <-timeout:
-			log.Println("timeout")
+		case <-timeoutCh:
+			// log.Println("[WaitForCondition] 从 timeoutCh 收到信号")
+			// log.Println("[WaitForCondition] 尝试写入 closeCh")
+			closeCh <- true
+			// log.Println("[WaitForCondition] 写入 closeCh 完成")
 			return false, "timeout"
 
-		case <-tick:
-			log.Println("tick") // 这里你可以做一些定时任务
-
-		case err := <-errCh:
-			log.Printf("读取出错: %v", err)
-			return false, ""
-
 		case msg := <-msgCh:
-			log.Println("processMessage")
-			ok, username, err := processMessage(conn, msg)
-			if err != nil {
-				log.Printf("读取或解析出错: %v", err)
-				return false, ""
-			}
-			if ok {
-				log.Println("condition met")
+			// log.Println("[WaitForCondition] 从 msgCh 收到:", string(msg))
+			readNext, username, err := processMessage(conn, msg)
+			// log.Println("[WaitForCondition] processMessage 返回:", readNext, username, err)
+
+			// log.Println("[WaitForCondition] 尝试写入 closeCh:", readNext)
+			closeCh <- readNext
+			// log.Println("[WaitForCondition] 写入 closeCh 完成")
+
+			if readNext {
+				// log.Println("[WaitForCondition] 条件满足，返回 true,", username)
 				return true, username
+			} else {
+				// log.Println("[WaitForCondition] 条件未满足，继续等待")
+				if err != nil {
+					// log.Println("[WaitForCondition] processMessage 错误:", err)
+				}
 			}
 		}
 	}
 }
 
+// 处理信息
 func processMessage(conn *websocket.Conn, msg []byte) (bool, string, error) {
 	_, _, payload, err := UnpackWebMessage(msg)
-	fmt.Printf("%+v", payload)
 	if err != nil {
 		return false, "", fmt.Errorf("failed to parse message: %w", err)
 	}
