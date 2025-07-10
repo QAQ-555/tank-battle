@@ -21,6 +21,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	//发送请求
+
 	notice := model.NoticePayload{
 		Notice: "websocket connect success",
 	}
