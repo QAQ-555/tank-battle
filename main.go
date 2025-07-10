@@ -9,8 +9,10 @@ import (
 
 func main() {
 	log.SetFlags(log.Lmicroseconds)
+
 	webserver.InitSpawnTanks()
 	http.HandleFunc("/ws", webserver.Handler)
+
 	// http.HandleFunc("/map", mapHandler)
 	// http.HandleFunc("/mapws", wsMapHandler)
 	go webserver.MapRenderloop()

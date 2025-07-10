@@ -1,0 +1,161 @@
+/**
+ * 输入处理器 - 处理键盘输入和控制
+ */
+class InputHandler {
+    constructor(gameCore) {
+        this.gameCore = gameCore;
+        this.keys = {
+            up: false,
+            down: false,
+            left: false,
+            right: false,
+            fire: false
+        };
+        
+        this.setupEventListeners();
+    }
+
+    /**
+     * 设置事件监听器
+     */
+    setupEventListeners() {
+        // 键盘控制
+        document.addEventListener('keydown', (e) => {
+            this.handleKeyDown(e);
+        });
+        
+        document.addEventListener('keyup', (e) => {
+            this.handleKeyUp(e);
+        });
+    }
+
+    /**
+     * 处理按键按下事件
+     * @param {KeyboardEvent} e 键盘事件
+     */
+    handleKeyDown(e) {
+        if (!this.gameCore.isConnected) return;
+        
+        let keyChanged = false;
+        let firePressed = false;
+        
+        switch (e.key.toLowerCase()) {
+            case 'w':
+                if (!this.keys.up) {
+                    this.keys.up = true;
+                    keyChanged = true;
+                }
+                break;
+            case 's':
+                if (!this.keys.down) {
+                    this.keys.down = true;
+                    keyChanged = true;
+                }
+                break;
+            case 'a':
+                if (!this.keys.left) {
+                    this.keys.left = true;
+                    keyChanged = true;
+                }
+                break;
+            case 'd':
+                if (!this.keys.right) {
+                    this.keys.right = true;
+                    keyChanged = true;
+                }
+                break;
+            case ' ':
+                // 空格键发射子弹
+                if (!this.keys.fire) {
+                    this.keys.fire = true;
+                    firePressed = true;
+                }
+                e.preventDefault(); // 防止空格键滚动页面
+                break;
+        }
+        
+        if (keyChanged) {
+            this.gameCore.onControlsChanged(this.keys);
+        }
+        
+        if (firePressed) {
+            this.gameCore.onFirePressed();
+        }
+        
+        if (keyChanged || firePressed) {
+            e.preventDefault();
+        }
+    }
+
+    /**
+     * 处理按键释放事件
+     * @param {KeyboardEvent} e 键盘事件
+     */
+    handleKeyUp(e) {
+        if (!this.gameCore.isConnected) return;
+        
+        let keyChanged = false;
+        switch (e.key.toLowerCase()) {
+            case 'w':
+                if (this.keys.up) {
+                    this.keys.up = false;
+                    keyChanged = true;
+                }
+                break;
+            case 's':
+                if (this.keys.down) {
+                    this.keys.down = false;
+                    keyChanged = true;
+                }
+                break;
+            case 'a':
+                if (this.keys.left) {
+                    this.keys.left = false;
+                    keyChanged = true;
+                }
+                break;
+            case 'd':
+                if (this.keys.right) {
+                    this.keys.right = false;
+                    keyChanged = true;
+                }
+                break;
+            case ' ':
+                // 空格键释放
+                if (this.keys.fire) {
+                    this.keys.fire = false;
+                }
+                e.preventDefault(); // 防止空格键滚动页面
+                break;
+        }
+        
+        if (keyChanged) {
+            this.gameCore.onControlsChanged(this.keys);
+        }
+        
+        if (keyChanged || e.key === ' ') {
+            e.preventDefault();
+        }
+    }
+
+    /**
+     * 获取当前按键状态
+     * @returns {Object} 按键状态对象
+     */
+    getKeyStates() {
+        return { ...this.keys };
+    }
+
+    /**
+     * 重置所有按键状态
+     */
+    resetKeys() {
+        this.keys = {
+            up: false,
+            down: false,
+            left: false,
+            right: false,
+            fire: false
+        };
+    }
+}

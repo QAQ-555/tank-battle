@@ -13,8 +13,8 @@ var FlagChan = make(chan bool)
 const (
 	MAP_SIZE_X       uint = 1542
 	MAP_SIZE_Y       uint = 512
-	TICK_INTERVAL_MS      = 1000
-	MAP_RENDER_MS         = 1000
+	TICK_INTERVAL_MS      = 50
+	MAP_RENDER_MS         = 50
 	WAIT_REPLY_TIME       = 60
 ) //建立链接发送数据
 

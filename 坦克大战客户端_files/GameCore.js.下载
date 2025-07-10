@@ -1,0 +1,473 @@
+/**
+ * 游戏核心类 - 管理游戏状态和协调各个模块
+ */
+class GameCore {
+    constructor() {
+        this.isConnected = false;
+        this.playerId = '';
+        this.playerName = '';
+        this.gameData = {
+            map: null,
+            mapSizeX: 0,
+            mapSizeY: 0,
+            tanks: [],
+            playerTank: null,
+            bullets: []
+        };
+        
+        // 子弹发射相关
+        this.bulletSpeed = 120; // 子弹速度（像素/帧）- 再增加一倍速度
+        this.lastFireTime = 0;
+        this.fireInterval = 300; // 发射间隔（毫秒）
+        
+        // 初始化各个模块
+        this.networkManager = new NetworkManager(this);
+        this.renderEngine = new RenderEngine(this);
+        this.inputHandler = new InputHandler(this);
+    }
+
+    /**
+     * 初始化游戏
+     */
+    init() {
+        this.renderEngine.init('gameCanvas');
+        this.setupUIEventListeners();
+        this.startGameLoop();
+        this.log('游戏核心初始化完成', 'info');
+    }
+
+    /**
+     * 启动游戏循环
+     */
+    startGameLoop() {
+        const gameLoop = () => {
+            if (this.isConnected) {
+                this.updateBullets();
+                this.renderEngine.markForRender();
+            }
+            requestAnimationFrame(gameLoop);
+        };
+        gameLoop();
+    }
+
+    /**
+     * 设置UI事件监听器
+     */
+    setupUIEventListeners() {
+        // 连接按钮
+        document.getElementById('connectBtn').addEventListener('click', () => {
+            this.connect();
+        });
+        
+        // 用户名输入框回车
+        document.getElementById('usernameInput').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                this.connect();
+            }
+        });
+    }
+
+    /**
+     * 连接到游戏服务器
+     */
+    async connect() {
+        const username = document.getElementById('usernameInput').value.trim();
+        if (!username) {
+            this.showLoginMessage('请输入用户名', 'error');
+            return;
+        }
+        
+        this.playerName = username;
+        this.updateStatus('连接中...');
+        
+        try {
+            await this.networkManager.connect(username);
+        } catch (error) {
+            this.showLoginMessage('连接失败: ' + error.message, 'error');
+        }
+    }
+
+    /**
+     * 网络连接建立回调
+     * @param {Object} connectionData 连接数据
+     */
+    onConnectionEstablished(connectionData) {
+        this.playerId = connectionData.playerId;
+        
+        // 保存游戏数据
+        this.gameData.mapSizeX = connectionData.mapSizeX;
+        this.gameData.mapSizeY = connectionData.mapSizeY;
+        this.gameData.map = this.decodeMap(connectionData.mapData, connectionData.mapSizeX, connectionData.mapSizeY);
+        
+        // 保存玩家坦克初始位置
+        this.gameData.playerTank = connectionData.playerTank;
+        
+        this.isConnected = true;
+        this.updateStatus('已连接');
+        this.showGamePanel();
+        this.renderEngine.initCanvas();
+        this.renderEngine.markForRender();
+    }
+
+    /**
+     * 网络连接丢失回调
+     */
+    onConnectionLost() {
+        this.isConnected = false;
+        this.updateStatus('连接断开');
+        this.showLoginPanel();
+        this.inputHandler.resetKeys();
+    }
+
+    /**
+     * 注册失败回调
+     * @param {string} message 错误消息
+     */
+    onRegistrationFailed(message) {
+        this.showLoginMessage(message, 'error');
+    }
+
+    /**
+     * 游戏状态更新回调
+     * @param {Array} tanks 坦克数据数组
+     */
+    onGameStateUpdate(tanks) {
+        this.gameData.tanks = tanks;
+        
+        // 更新玩家坦克信息
+        const playerTank = tanks.find(tank => tank.id === this.playerId);
+        if (playerTank) {
+            this.gameData.playerTank = playerTank;
+            this.updatePlayerInfo(playerTank);
+        }
+        
+        // 标记需要渲染
+        this.renderEngine.markForRender();
+    }
+
+    /**
+     * 控制状态改变回调
+     * @param {Object} controls 控制状态
+     */
+    onControlsChanged(controls) {
+        this.networkManager.sendTankControl(controls);
+    }
+
+    /**
+     * 处理开火按键按下
+     */
+    onFirePressed() {
+        const now = Date.now();
+        if (now - this.lastFireTime < this.fireInterval) {
+            return; // 还在冷却时间内
+        }
+        
+        this.lastFireTime = now;
+        this.fireBullet();
+    }
+
+    /**
+     * 发射子弹
+     */
+    fireBullet() {
+        if (!this.gameData.playerTank) return;
+        
+        const gunDirection = this.getPlayerGunDirection();
+        const playerTank = this.gameData.playerTank;
+        
+        // 计算子弹起始位置（从炮管末端发射）
+        const bulletStartPos = this.calculateBulletStartPosition(playerTank, gunDirection);
+        
+        // 计算子弹速度向量
+        const bulletVelocity = this.calculateBulletVelocity(gunDirection);
+        
+        // 创建子弹对象
+        const bullet = {
+            id: `bullet_${this.playerId}_${Date.now()}`,
+            x: bulletStartPos.x,
+            y: bulletStartPos.y,
+            vx: bulletVelocity.vx,
+            vy: bulletVelocity.vy,
+            ownerId: this.playerId,
+            direction: gunDirection,
+            createdTime: Date.now()
+        };
+        
+        // 添加到本地子弹列表
+        this.gameData.bullets.push(bullet);
+        
+        // 发送子弹发射消息到服务器
+        this.networkManager.sendBulletFire(bullet);
+        
+        this.log(`发射子弹: 方向=${gunDirection}, 位置=(${bullet.x.toFixed(1)}, ${bullet.y.toFixed(1)})`, 'info');
+        
+        // 标记需要渲染
+        this.renderEngine.markForRender();
+    }
+
+    /**
+     * 计算子弹起始位置
+     * @param {Object} tank 坦克对象
+     * @param {number} direction 炮管方向
+     * @returns {Object} 子弹起始位置 {x, y}
+     */
+    calculateBulletStartPosition(tank, direction) {
+        const tankCenterX = tank.x + 0.5;
+        const tankCenterY = tank.y + 0.5;
+        const gunLength = 0.6; // 炮管长度（格子单位）
+        
+        // 根据方向计算炮管末端位置
+        const directionMap = {
+            1: { dx: -0.707, dy: 0.707 },   // 左下
+            2: { dx: 0, dy: 1 },           // 下
+            3: { dx: 0.707, dy: 0.707 },   // 右下
+            4: { dx: -1, dy: 0 },          // 左
+            6: { dx: 1, dy: 0 },           // 右
+            7: { dx: -0.707, dy: -0.707 }, // 左上
+            8: { dx: 0, dy: -1 },          // 上
+            9: { dx: 0.707, dy: -0.707 }   // 右上
+        };
+        
+        const dir = directionMap[direction] || directionMap[6]; // 默认向右
+        
+        return {
+            x: tankCenterX + dir.dx * gunLength,
+            y: tankCenterY + dir.dy * gunLength
+        };
+    }
+
+    /**
+     * 计算子弹速度向量
+     * @param {number} direction 方向代码
+     * @returns {Object} 速度向量 {vx, vy}
+     */
+    calculateBulletVelocity(direction) {
+        const speed = this.bulletSpeed;
+        
+        // 根据方向计算速度向量
+        const directionMap = {
+            1: { vx: -speed * 0.707, vy: speed * 0.707 },   // 左下
+            2: { vx: 0, vy: speed },                        // 下
+            3: { vx: speed * 0.707, vy: speed * 0.707 },    // 右下
+            4: { vx: -speed, vy: 0 },                       // 左
+            6: { vx: speed, vy: 0 },                        // 右
+            7: { vx: -speed * 0.707, vy: -speed * 0.707 },  // 左上
+            8: { vx: 0, vy: -speed },                       // 上
+            9: { vx: speed * 0.707, vy: -speed * 0.707 }    // 右上
+        };
+        
+        return directionMap[direction] || directionMap[6]; // 默认向右
+    }
+
+    /**
+     * 更新子弹位置
+     */
+    updateBullets() {
+        // 更新子弹位置并移除需要销毁的子弹
+        this.gameData.bullets = this.gameData.bullets.filter(bullet => {
+            // 更新子弹位置 - 使用更高的速度
+            bullet.x += bullet.vx * 0.016; // 假设60FPS，每帧约16ms
+            bullet.y += bullet.vy * 0.016;
+            
+            // 检查子弹是否超出地图边界
+            if (bullet.x < 0 || bullet.x >= this.gameData.mapSizeX ||
+                bullet.y < 0 || bullet.y >= this.gameData.mapSizeY) {
+                this.log(`子弹 ${bullet.id} 超出边界被销毁`, 'info');
+                return false;
+            }
+            
+            // 检查子弹是否撞到墙壁
+            const mapX = Math.floor(bullet.x);
+            const mapY = Math.floor(bullet.y);
+            if (this.gameData.map[mapY] && this.gameData.map[mapY][mapX] === 1) {
+                this.log(`子弹 ${bullet.id} 撞到墙壁被销毁`, 'info');
+                return false;
+            }
+            
+            // 检查子弹是否击中坦克
+            const hitTank = this.checkBulletTankCollision(bullet);
+            if (hitTank) {
+                this.log(`子弹 ${bullet.id} 击中坦克 ${hitTank.id}`, 'info');
+                return false;
+            }
+            
+            return true;
+        });
+    }
+
+    /**
+     * 检查子弹与坦克的碰撞
+     * @param {Object} bullet 子弹对象
+     * @returns {Object|null} 被击中的坦克对象，如果没有碰撞则返回null
+     */
+    checkBulletTankCollision(bullet) {
+        const bulletRadius = 0.2; // 子弹半径（格子单位）
+        const tankRadius = 0.4; // 坦克半径（格子单位）
+        
+        for (const tank of this.gameData.tanks) {
+            // 不检查子弹拥有者自己的坦克
+            if (tank.id === bullet.ownerId) {
+                continue;
+            }
+            
+            // 计算子弹中心与坦克中心的距离
+            const tankCenterX = tank.x + 0.5;
+            const tankCenterY = tank.y + 0.5;
+            const distance = Math.sqrt(
+                Math.pow(bullet.x - tankCenterX, 2) +
+                Math.pow(bullet.y - tankCenterY, 2)
+            );
+            
+            // 如果距离小于两个半径之和，则发生碰撞
+            if (distance < bulletRadius + tankRadius) {
+                return tank;
+            }
+        }
+        
+        return null;
+    }
+
+    /**
+     * 获取玩家炮管朝向
+     * @returns {number} 炮管方向代码
+     */
+    getPlayerGunDirection() {
+        const keys = this.inputHandler.getKeyStates();
+        
+        // 根据玩家当前按键状态确定炮管朝向
+        // 优先级：斜向 > 直向，最后按下的键优先
+        
+        if (keys.up && keys.left) {
+            return 7; // 左上
+        } else if (keys.up && keys.right) {
+            return 9; // 右上
+        } else if (keys.down && keys.left) {
+            return 1; // 左下
+        } else if (keys.down && keys.right) {
+            return 3; // 右下
+        } else if (keys.up) {
+            return 8; // 上
+        } else if (keys.down) {
+            return 2; // 下
+        } else if (keys.left) {
+            return 4; // 左
+        } else if (keys.right) {
+            return 6; // 右
+        } else {
+            return 6; // 默认向右
+        }
+    }
+
+    /**
+     * 解码地图数据
+     * @param {string} mapData Base64编码的地图数据
+     * @param {number} sizeX 地图宽度
+     * @param {number} sizeY 地图高度
+     * @returns {Array} 二维地图数组
+     */
+    decodeMap(mapData, sizeX, sizeY) {
+        try {
+            const binaryString = atob(mapData);
+            const map = [];
+            
+            for (let y = 0; y < sizeY; y++) {
+                map[y] = [];
+                for (let x = 0; x < sizeX; x++) {
+                    const index = y * sizeX + x;
+                    map[y][x] = index < binaryString.length ? binaryString.charCodeAt(index) : 0;
+                }
+            }
+            
+            return map;
+        } catch (error) {
+            this.log('地图解码失败: ' + error.message, 'error');
+            return [];
+        }
+    }
+
+    /**
+     * 更新玩家信息显示
+     * @param {Object} tank 玩家坦克对象
+     */
+    updatePlayerInfo(tank) {
+        document.getElementById('playerName').textContent = this.playerName;
+        document.getElementById('playerX').textContent = tank.x;
+        document.getElementById('playerY').textContent = tank.y;
+    }
+
+    /**
+     * 更新连接状态显示
+     * @param {string} status 状态文本
+     */
+    updateStatus(status) {
+        const statusElement = document.getElementById('status');
+        statusElement.textContent = status;
+        
+        const statusContainer = statusElement.parentElement;
+        statusContainer.className = 'connection-status';
+        
+        if (status === '已连接') {
+            statusContainer.classList.add('connected');
+        } else if (status.includes('错误') || status.includes('断开')) {
+            statusContainer.classList.add('error');
+        }
+    }
+
+    /**
+     * 显示登录消息
+     * @param {string} message 消息内容
+     * @param {string} type 消息类型
+     */
+    showLoginMessage(message, type) {
+        const messageElement = document.getElementById('loginMessage');
+        messageElement.textContent = message;
+        messageElement.className = type;
+    }
+
+    /**
+     * 显示登录面板
+     */
+    showLoginPanel() {
+        document.getElementById('loginPanel').style.display = 'block';
+        document.getElementById('gamePanel').style.display = 'none';
+    }
+
+    /**
+     * 显示游戏面板
+     */
+    showGamePanel() {
+        document.getElementById('loginPanel').style.display = 'none';
+        document.getElementById('gamePanel').style.display = 'block';
+    }
+
+    /**
+     * 记录日志
+     * @param {string} message 日志消息
+     * @param {string} type 日志类型
+     */
+    log(message, type = 'info') {
+        const debugLog = document.getElementById('debugLog');
+        const entry = document.createElement('div');
+        entry.className = `debug-entry ${type}`;
+        entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+        
+        debugLog.appendChild(entry);
+        debugLog.scrollTop = debugLog.scrollHeight;
+        
+        // 限制日志条数
+        while (debugLog.children.length > 50) {
+            debugLog.removeChild(debugLog.firstChild);
+        }
+        
+        console.log(`[TankGame] ${message}`);
+    }
+
+    /**
+     * 断开连接
+     */
+    disconnect() {
+        this.networkManager.disconnect();
+        this.isConnected = false;
+        this.inputHandler.resetKeys();
+    }
+}

@@ -49,7 +49,7 @@ type == 16 注册请求，详见 [2.1](#21-链接建立)
     "type": 16,
     "id": "",
     "payload": {
-        "username":"888", //string
+        "username":"qaq_555", //string
         "success":true    //发送true以注册
     }
 }
@@ -68,16 +68,20 @@ username为玩家身份的唯一标识
 ```
 成功注册时，会收到由客户端发送来的地图与连接相关数据，如下所示
 ```json
-"payload": {
-    "map": "AQEBAAAAAAAAAAAAAAAAAAAAAAAAAAAA", //地图数据字节序列 [][]byte
-    "map_size_x": 30,       //地图x轴长度   uint
-    "map_size_y": 30,       //地图y轴长度   uint
-    "tank_coord_x": 1,      //tank坐标
-    "tank_coord_y": 1,
-    "tank_facing": 2,       //tank朝向
-    "tick_interval_ms": 50, //服务端广播数据频率 单位ms
-    "map_render_ms": 500,   //服务端数据刷新频率 单位ms
-    "username": "QAQ-555"   //链接对应id string
+{
+    "type": 1,
+    "id": "test",
+    "payload": {
+        "map":"AAAAAA",      //地图字节序列
+        "map_size_x": 1542,  //地图尺寸
+        "map_size_y": 512,   //
+        "tank_coord_x": 1,   //控制坦克坐标
+        "tank_coord_y": 1,
+        "tank_facing": 2,    //坦克面向
+        "tick_interval_ms": 1000, //服务端参数
+        "map_render_ms": 1000,
+        "username": "test"   //用户名
+    }
 }
 ```
 客户端需要利用地图数据构建地图用于后续渲染，并保留id用于向服务端发送请求

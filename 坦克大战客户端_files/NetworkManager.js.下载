@@ -1,0 +1,218 @@
+/**
+ * 网络管理器 - 处理WebSocket通信
+ */
+class NetworkManager {
+    constructor(gameCore) {
+        this.gameCore = gameCore;
+        this.ws = null;
+        this.isConnected = false;
+        this.serverUrl = 'ws://localhost:8881/ws';
+    }
+
+    /**
+     * 连接到游戏服务器
+     * @param {string} username 用户名
+     * @returns {Promise} 连接Promise
+     */
+    connect(username) {
+        return new Promise((resolve, reject) => {
+            try {
+                this.ws = new WebSocket(this.serverUrl);
+                
+                this.ws.onopen = () => {
+                    this.gameCore.log('WebSocket连接已建立', 'success');
+                };
+                
+                this.ws.onmessage = (event) => {
+                    this.handleMessage(event.data);
+                };
+                
+                this.ws.onclose = () => {
+                    this.gameCore.log('WebSocket连接已关闭', 'error');
+                    this.isConnected = false;
+                    this.gameCore.onConnectionLost();
+                };
+                
+                this.ws.onerror = (error) => {
+                    this.gameCore.log('WebSocket连接错误: ' + error, 'error');
+                    reject(error);
+                };
+                
+                // 保存用户名用于注册
+                this.username = username;
+                resolve();
+                
+            } catch (error) {
+                this.gameCore.log('连接失败: ' + error.message, 'error');
+                reject(error);
+            }
+        });
+    }
+
+    /**
+     * 处理收到的消息
+     * @param {string} data 消息数据
+     */
+    handleMessage(data) {
+        try {
+            const message = JSON.parse(data);
+            this.gameCore.log(`收到消息: type=${message.type}, id=${message.id}`, 'info');
+            
+            switch (message.type) {
+                case 0: // 服务端提示
+                    this.handleNotice(message);
+                    break;
+                case 1: // 连接建立数据
+                    this.handleConnectionData(message);
+                    break;
+                case 2: // 游戏状态广播
+                    this.handleGameBroadcast(message);
+                    break;
+                default:
+                    this.gameCore.log(`未知消息类型: ${message.type}`, 'error');
+            }
+        } catch (error) {
+            this.gameCore.log('解析消息失败: ' + error.message, 'error');
+        }
+    }
+
+    /**
+     * 处理服务器通知
+     * @param {Object} message 消息对象
+     */
+    handleNotice(message) {
+        const notice = message.payload.notice;
+        this.gameCore.log(`服务器通知: ${notice}`, 'info');
+        
+        if (notice === 'websocket connect success') {
+            // 连接成功，发送注册请求
+            this.register();
+        } else if (notice.includes('username is empty or already exists')) {
+            this.gameCore.onRegistrationFailed('用户名为空或已存在');
+        }
+    }
+
+    /**
+     * 处理连接建立数据
+     * @param {Object} message 消息对象
+     */
+    handleConnectionData(message) {
+        const payload = message.payload;
+        this.isConnected = true;
+        
+        // 通知游戏核心连接成功
+        this.gameCore.onConnectionEstablished({
+            playerId: message.id,
+            mapSizeX: payload.map_size_x,
+            mapSizeY: payload.map_size_y,
+            mapData: payload.map,
+            playerTank: {
+                x: payload.tank_coord_x,
+                y: payload.tank_coord_y,
+                facing: payload.tank_facing
+            }
+        });
+        
+        this.gameCore.log(`注册成功! 玩家ID: ${message.id}`, 'success');
+        this.gameCore.log(`地图大小: ${payload.map_size_x} x ${payload.map_size_y}`, 'info');
+        this.gameCore.log(`坦克位置: (${payload.tank_coord_x}, ${payload.tank_coord_y})`, 'info');
+    }
+
+    /**
+     * 处理游戏状态广播
+     * @param {Object} message 消息对象
+     */
+    handleGameBroadcast(message) {
+        const payload = message.payload;
+        if (payload.tanks) {
+            this.gameCore.onGameStateUpdate(payload.tanks);
+        }
+    }
+
+    /**
+     * 发送注册请求
+     */
+    register() {
+        const registerMessage = {
+            type: 16,
+            id: '',
+            payload: {
+                username: this.username,
+                success: true
+            }
+        };
+        
+        this.sendMessage(registerMessage);
+        this.gameCore.log(`发送注册请求: ${this.username}`, 'info');
+    }
+
+    /**
+     * 发送坦克控制指令
+     * @param {Object} controls 控制状态
+     */
+    sendTankControl(controls) {
+        if (!this.isConnected) return;
+        
+        const controlMessage = {
+            type: 15,
+            id: this.gameCore.playerId,
+            payload: {
+                up: controls.up ? true : false,
+                down: controls.down ? true : false,
+                left: controls.left ? true : false,
+                right: controls.right ? true : false,
+                action: "0"
+            }
+        };
+        
+        this.sendMessage(controlMessage);
+    }
+
+    /**
+     * 发送子弹发射消息
+     * @param {Object} bullet 子弹对象
+     */
+    sendBulletFire(bullet) {
+        if (!this.isConnected) return;
+        
+        const bulletMessage = {
+            type: 17, // 假设类型17为子弹发射消息
+            id: this.gameCore.playerId,
+            payload: {
+                bulletId: bullet.id,
+                x: bullet.x,
+                y: bullet.y,
+                vx: bullet.vx,
+                vy: bullet.vy,
+                direction: bullet.direction,
+                timestamp: bullet.createdTime
+            }
+        };
+        
+        this.sendMessage(bulletMessage);
+        this.gameCore.log(`发送子弹发射消息: ${bullet.id}`, 'info');
+    }
+
+    /**
+     * 发送消息到服务器
+     * @param {Object} message 消息对象
+     */
+    sendMessage(message) {
+        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+            this.ws.send(JSON.stringify(message));
+        } else {
+            this.gameCore.log('WebSocket未连接，无法发送消息', 'error');
+        }
+    }
+
+    /**
+     * 断开连接
+     */
+    disconnect() {
+        if (this.ws) {
+            this.ws.close();
+            this.ws = null;
+        }
+        this.isConnected = false;
+    }
+}

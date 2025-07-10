@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<!-- saved from url=(0040)http://localhost:8881/tank-game.html -->
+<html lang="zh-CN"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+    
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>坦克大战客户端</title>
+    <link rel="stylesheet" href="./坦克大战客户端_files/tank-game.css">
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>坦克大战</h1>
+            <div class="connection-status">
+                <span id="status">未连接</span>
+            </div>
+        </div>
+        
+        <div class="login-panel" id="loginPanel">
+            <h2>加入游戏</h2>
+            <input type="text" id="usernameInput" placeholder="输入用户名" maxlength="20">
+            <button id="connectBtn">连接游戏</button>
+            <div id="loginMessage"></div>
+        </div>
+        
+        <div class="game-panel" id="gamePanel" style="display: none;">
+            <div class="game-info">
+                <div class="player-info">
+                    <span>玩家: <span id="playerName"></span></span>
+                    <span>坐标: (<span id="playerX">0</span>, <span id="playerY">0</span>)</span>
+                </div>
+                <div class="controls-info">
+                    <p>控制说明: WASD移动坦克</p>
+                </div>
+            </div>
+            
+            <div class="game-area">
+                <canvas id="gameCanvas" width="600" height="600"></canvas>
+            </div>
+            
+            <div class="debug-info">
+                <h3>调试信息</h3>
+                <div id="debugLog"><div class="debug-entry info">[16:24:49] 游戏核心初始化完成</div></div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 按依赖顺序加载模块 -->
+    <script src="./坦克大战客户端_files/NetworkManager.js.下载"></script>
+    <script src="./坦克大战客户端_files/RenderEngine.js.下载"></script>
+    <script src="./坦克大战客户端_files/InputHandler.js.下载"></script>
+    <script src="./坦克大战客户端_files/GameCore.js.下载"></script>
+    <script src="./坦克大战客户端_files/TankGame.js.下载"></script>
+
+</body></html>

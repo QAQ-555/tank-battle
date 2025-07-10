@@ -1,0 +1,604 @@
+/**
+ * 渲染引擎 - 处理游戏画面渲染
+ */
+class RenderEngine {
+    constructor(gameCore) {
+        this.gameCore = gameCore;
+        this.canvas = null;
+        this.ctx = null;
+        this.cellSize = 20;
+        
+        // 性能优化相关
+        this.lastRenderTime = 0;
+        this.renderThrottle = 16; // 限制渲染频率为60FPS (16ms)
+        this.animationFrameId = null;
+        this.needsRender = false;
+        this.mapCanvas = null; // 地图缓存画布
+        this.mapCtx = null;
+        this.mapRendered = false;
+        
+        // 性能监控
+        this.frameCount = 0;
+        this.lastFpsTime = 0;
+        this.currentFps = 0;
+        this.renderCount = 0;
+    }
+
+    /**
+     * 初始化渲染引擎
+     * @param {string} canvasId 画布元素ID
+     */
+    init(canvasId) {
+        this.canvas = document.getElementById(canvasId);
+        this.ctx = this.canvas.getContext('2d');
+        
+        // 窗口大小变化时重新调整画布
+        window.addEventListener('resize', () => {
+            if (this.gameCore.isConnected && this.gameCore.gameData.map) {
+                this.initCanvas();
+                this.needsRender = true;
+                this.scheduleRender();
+            }
+        });
+    }
+
+    /**
+     * 初始化画布尺寸和缓存
+     */
+    initCanvas() {
+        // 获取容器宽度，使画布占满容器
+        const container = this.canvas.parentElement;
+        const containerWidth = container.clientWidth - 20; // 减去padding
+        
+        // 根据地图实际大小计算合适的画布高度
+        const mapAspectRatio = this.gameCore.gameData.mapSizeY / this.gameCore.gameData.mapSizeX;
+        const containerHeight = Math.min(containerWidth * mapAspectRatio, 400); // 最大高度400px
+        
+        this.canvas.width = containerWidth;
+        this.canvas.height = containerHeight;
+        
+        // 调整单元格大小以适应画布
+        this.cellSize = Math.min(
+            containerWidth / this.gameCore.gameData.mapSizeX,
+            containerHeight / this.gameCore.gameData.mapSizeY
+        );
+        
+        // 确保单元格大小不会太小
+        this.cellSize = Math.max(this.cellSize, 0.5);
+        
+        // 创建地图缓存画布
+        this.createMapCache();
+    }
+
+    /**
+     * 创建地图缓存画布
+     */
+    createMapCache() {
+        // 创建离屏画布用于缓存地图
+        this.mapCanvas = document.createElement('canvas');
+        this.mapCanvas.width = this.canvas.width;
+        this.mapCanvas.height = this.canvas.height;
+        this.mapCtx = this.mapCanvas.getContext('2d');
+        
+        // 渲染地图到缓存画布
+        this.renderMapToCache();
+        this.mapRendered = true;
+    }
+
+    /**
+     * 将地图渲染到缓存画布
+     */
+    renderMapToCache() {
+        if (!this.mapCtx || !this.gameCore.gameData.map) return;
+        
+        // 清空缓存画布
+        this.mapCtx.fillStyle = '#2c2c54';
+        this.mapCtx.fillRect(0, 0, this.mapCanvas.width, this.mapCanvas.height);
+        
+        // 渲染地图到缓存
+        for (let y = 0; y < this.gameCore.gameData.mapSizeY; y++) {
+            for (let x = 0; x < this.gameCore.gameData.mapSizeX; x++) {
+                const cellValue = this.gameCore.gameData.map[y] ? this.gameCore.gameData.map[y][x] : 0;
+                const pixelX = x * this.cellSize;
+                const pixelY = y * this.cellSize;
+                
+                // 根据地图数据渲染不同类型的地形
+                if (cellValue === 1) {
+                    // 墙壁 - 使用更鲜明的颜色
+                    this.mapCtx.fillStyle = '#8b4513';
+                    this.mapCtx.fillRect(pixelX, pixelY, this.cellSize, this.cellSize);
+                    this.mapCtx.strokeStyle = '#5d2f0a';
+                    this.mapCtx.strokeRect(pixelX, pixelY, this.cellSize, this.cellSize);
+                } else {
+                    // 空地 - 使用更深的绿色作为对比
+                    this.mapCtx.fillStyle = '#1e3a1e';
+                    this.mapCtx.fillRect(pixelX, pixelY, this.cellSize, this.cellSize);
+                }
+            }
+        }
+    }
+
+    /**
+     * 调度渲染
+     */
+    scheduleRender() {
+        if (this.animationFrameId) return; // 已经有待处理的渲染请求
+        
+        this.animationFrameId = requestAnimationFrame(() => {
+            const now = performance.now();
+            if (now - this.lastRenderTime >= this.renderThrottle && this.needsRender) {
+                this.render();
+                this.lastRenderTime = now;
+                this.needsRender = false;
+            }
+            this.animationFrameId = null;
+            
+            // 如果还需要渲染，继续调度
+            if (this.needsRender) {
+                this.scheduleRender();
+            }
+        });
+    }
+
+    /**
+     * 主渲染方法
+     */
+    render() {
+        if (!this.ctx || !this.gameCore.gameData.map) return;
+        
+        const renderStart = performance.now();
+        
+        // 使用缓存的地图画布，避免重复渲染地图
+        if (this.mapRendered && this.mapCanvas) {
+            this.ctx.drawImage(this.mapCanvas, 0, 0);
+        } else {
+            // 清空画布 - 使用深色背景增强对比
+            this.ctx.fillStyle = '#2c2c54';
+            this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+            
+            // 渲染地图（回退方案）
+            this.renderMap();
+        }
+        
+        // 渲染子弹（在坦克下面）
+        this.renderBullets();
+        
+        // 渲染坦克
+        this.renderTanks();
+        
+        // 性能监控
+        this.updatePerformanceStats(renderStart);
+    }
+
+    /**
+     * 渲染地图（回退方案）
+     */
+    renderMap() {
+        for (let y = 0; y < this.gameCore.gameData.mapSizeY; y++) {
+            for (let x = 0; x < this.gameCore.gameData.mapSizeX; x++) {
+                const cellValue = this.gameCore.gameData.map[y] ? this.gameCore.gameData.map[y][x] : 0;
+                const pixelX = x * this.cellSize;
+                const pixelY = y * this.cellSize;
+                
+                // 根据地图数据渲染不同类型的地形
+                if (cellValue === 1) {
+                    // 墙壁 - 使用更鲜明的颜色
+                    this.ctx.fillStyle = '#8b4513';
+                    this.ctx.fillRect(pixelX, pixelY, this.cellSize, this.cellSize);
+                    this.ctx.strokeStyle = '#5d2f0a';
+                    this.ctx.strokeRect(pixelX, pixelY, this.cellSize, this.cellSize);
+                } else {
+                    // 空地 - 使用更深的绿色作为对比
+                    this.ctx.fillStyle = '#1e3a1e';
+                    this.ctx.fillRect(pixelX, pixelY, this.cellSize, this.cellSize);
+                }
+            }
+        }
+    }
+
+    /**
+     * 渲染所有坦克
+     */
+    renderTanks() {
+        this.gameCore.gameData.tanks.forEach(tank => {
+            this.renderTank(tank);
+        });
+    }
+
+    /**
+     * 渲染所有子弹
+     */
+    renderBullets() {
+        if (!this.gameCore.gameData.bullets) return;
+        
+        this.gameCore.gameData.bullets.forEach(bullet => {
+            this.renderBullet(bullet);
+        });
+    }
+
+    /**
+     * 渲染单个子弹
+     * @param {Object} bullet 子弹对象
+     */
+    renderBullet(bullet) {
+        const pixelX = bullet.x * this.cellSize;
+        const pixelY = bullet.y * this.cellSize;
+        const bulletSize = Math.max(this.cellSize * 0.3, 4); // 子弹大小，最小4像素
+        
+        // 判断是否为玩家发射的子弹
+        const isPlayerBullet = bullet.ownerId === this.gameCore.playerId;
+        
+        this.ctx.save();
+        
+        // 绘制子弹主体
+        this.ctx.fillStyle = isPlayerBullet ? '#ffff00' : '#ff4757'; // 玩家子弹黄色，其他红色
+        this.ctx.beginPath();
+        this.ctx.arc(pixelX, pixelY, bulletSize, 0, 2 * Math.PI);
+        this.ctx.fill();
+        
+        // 绘制子弹边框
+        this.ctx.strokeStyle = '#000000';
+        this.ctx.lineWidth = 1;
+        this.ctx.stroke();
+        
+        // 绘制子弹尾迹效果
+        this.ctx.strokeStyle = isPlayerBullet ? '#ffff88' : '#ff6b7a';
+        this.ctx.lineWidth = 2;
+        this.ctx.beginPath();
+        
+        // 根据子弹速度方向绘制尾迹
+        const trailLength = bulletSize * 2;
+        const normalizedVx = bullet.vx / Math.sqrt(bullet.vx * bullet.vx + bullet.vy * bullet.vy);
+        const normalizedVy = bullet.vy / Math.sqrt(bullet.vx * bullet.vx + bullet.vy * bullet.vy);
+        
+        this.ctx.moveTo(pixelX, pixelY);
+        this.ctx.lineTo(
+            pixelX - normalizedVx * trailLength,
+            pixelY - normalizedVy * trailLength
+        );
+        this.ctx.stroke();
+        
+        this.ctx.restore();
+    }
+
+    /**
+     * 渲染单个坦克
+     * @param {Object} tank 坦克对象
+     */
+    renderTank(tank) {
+        const pixelX = tank.x * this.cellSize;
+        const pixelY = tank.y * this.cellSize;
+        // 进一步增加坦克大小，最小为24像素
+        const tankSize = Math.max(this.cellSize * 4, 24);
+        const centerX = pixelX + this.cellSize / 2;
+        const centerY = pixelY + this.cellSize / 2;
+        
+        // 判断是否为玩家坦克
+        const isPlayer = tank.id === this.gameCore.playerId;
+        
+        this.ctx.save();
+        this.ctx.translate(centerX, centerY);
+        
+        // 根据移动方向旋转坦克
+        const rotation = this.getRotationFromOrientation(tank.orientation);
+        this.ctx.rotate(rotation);
+        
+        // 绘制坦克主体（更像坦克的形状）
+        this.drawTankBody(tankSize, isPlayer);
+        
+        // 绘制炮塔 - 玩家坦克直接根据按键方向设置炮管朝向，其他坦克使用服务端gunfacing
+        if (isPlayer) {
+            this.drawPlayerTankTurret(tankSize, isPlayer);
+            // 玩家坦克的炮管渲染已经处理了ctx.restore()
+        } else {
+            this.drawOtherTankTurret(tank, tankSize, isPlayer);
+            // 其他坦克的炮管渲染已经处理了ctx.restore()
+        }
+        
+        // 显示坦克ID（调试用）
+        this.ctx.fillStyle = '#ffffff';
+        this.ctx.font = '8px Arial';
+        this.ctx.textAlign = 'center';
+        this.ctx.fillText(
+            tank.id.substring(0, 6),
+            centerX,
+            centerY + tankSize/2 + 12
+        );
+    }
+
+    /**
+     * 绘制坦克主体
+     * @param {number} tankSize 坦克尺寸
+     * @param {boolean} isPlayer 是否为玩家坦克
+     */
+    drawTankBody(tankSize, isPlayer) {
+        const bodyWidth = tankSize * 0.8;
+        const bodyHeight = tankSize * 0.6;
+        
+        // 坦克主体 - 使用更鲜明的颜色
+        this.ctx.fillStyle = isPlayer ? '#00ff41' : '#ff4757';
+        this.ctx.fillRect(-bodyWidth/2, -bodyHeight/2, bodyWidth, bodyHeight);
+        
+        // 坦克履带 - 深色对比
+        this.ctx.fillStyle = isPlayer ? '#2ed573' : '#ff3838';
+        this.ctx.fillRect(-bodyWidth/2, -bodyHeight/2 - 4, bodyWidth, 8);
+        this.ctx.fillRect(-bodyWidth/2, bodyHeight/2 - 4, bodyWidth, 8);
+        
+        // 坦克边框 - 黑色边框增强对比
+        this.ctx.strokeStyle = '#000000';
+        this.ctx.lineWidth = 2;
+        this.ctx.strokeRect(-bodyWidth/2, -bodyHeight/2, bodyWidth, bodyHeight);
+        
+        // 坦克中心点
+        this.ctx.fillStyle = isPlayer ? '#ffffff' : '#000000';
+        this.ctx.beginPath();
+        this.ctx.arc(0, 0, 4, 0, 2 * Math.PI);
+        this.ctx.fill();
+        
+        // 中心点边框
+        this.ctx.strokeStyle = isPlayer ? '#000000' : '#ffffff';
+        this.ctx.lineWidth = 1;
+        this.ctx.stroke();
+    }
+
+    /**
+     * 绘制玩家坦克炮塔 - 直接根据按键方向
+     * @param {number} tankSize 坦克尺寸
+     * @param {boolean} isPlayer 是否为玩家坦克
+     */
+    drawPlayerTankTurret(tankSize, isPlayer) {
+        const keys = this.gameCore.inputHandler.getKeyStates();
+        
+        // 重置Canvas变换，避免坦克主体旋转影响炮管
+        this.ctx.restore(); // 恢复到坦克主体旋转之前的状态
+        this.ctx.save();   // 重新保存状态
+        
+        // 重新设置坐标原点到坦克中心
+        const tank = this.gameCore.gameData.tanks.find(t => t.id === this.gameCore.playerId);
+        if (tank) {
+            const pixelX = tank.x * this.cellSize;
+            const pixelY = tank.y * this.cellSize;
+            const centerX = pixelX + this.cellSize / 2;
+            const centerY = pixelY + this.cellSize / 2;
+            this.ctx.translate(centerX, centerY);
+        }
+        
+        // 直接根据按键状态计算炮管角度，不受坦克主体旋转影响
+        let gunRotation = 0; // 默认向右
+        let direction = "right"; // 调试用
+        
+        if (keys.up && keys.left) {
+            gunRotation = Math.PI * 5/4; // 左上 (225度)
+            direction = "up-left";
+        } else if (keys.up && keys.right) {
+            gunRotation = Math.PI * 7/4; // 右上 (315度)
+            direction = "up-right";
+        } else if (keys.down && keys.left) {
+            gunRotation = Math.PI * 3/4; // 左下 (135度)
+            direction = "down-left";
+        } else if (keys.down && keys.right) {
+            gunRotation = Math.PI / 4; // 右下 (45度)
+            direction = "down-right";
+        } else if (keys.up) {
+            gunRotation = Math.PI * 3/2; // 上 (270度)
+            direction = "up";
+        } else if (keys.down) {
+            gunRotation = Math.PI / 2; // 下 (90度)
+            direction = "down";
+        } else if (keys.left) {
+            gunRotation = Math.PI; // 左 (180度)
+            direction = "left";
+        } else if (keys.right) {
+            gunRotation = 0; // 右 (0度)
+            direction = "right";
+        }
+        
+        // 添加调试日志
+        if (keys.up || keys.down || keys.left || keys.right) {
+            this.gameCore.log(`炮管方向: ${direction}, 角度: ${(gunRotation * 180 / Math.PI).toFixed(1)}度`, 'info');
+        }
+        
+        this.ctx.rotate(gunRotation);
+        
+        // 绘制炮管
+        const gunLength = tankSize * 0.6;
+        const gunWidth = 6;
+        
+        this.ctx.fillStyle = '#ffa502';
+        this.ctx.fillRect(0, -gunWidth/2, gunLength, gunWidth);
+        
+        // 炮管末端
+        this.ctx.fillStyle = '#ff7675';
+        this.ctx.fillRect(gunLength - 3, -gunWidth/2 - 2, 6, gunWidth + 4);
+        
+        // 炮管边框
+        this.ctx.strokeStyle = '#000000';
+        this.ctx.lineWidth = 1;
+        this.ctx.strokeRect(0, -gunWidth/2, gunLength, gunWidth);
+        
+        this.ctx.restore();
+        
+        // 绘制炮塔
+        this.ctx.fillStyle = '#ffb8b8';
+        this.ctx.beginPath();
+        this.ctx.arc(0, 0, tankSize * 0.3, 0, 2 * Math.PI);
+        this.ctx.fill();
+        
+        this.ctx.strokeStyle = '#000000';
+        this.ctx.lineWidth = 2;
+        this.ctx.stroke();
+        
+        this.ctx.restore(); // 恢复Canvas状态
+    }
+
+    /**
+     * 绘制其他坦克炮塔 - 使用服务端gunfacing数据，避免Canvas变换叠加
+     * @param {Object} tank 坦克对象
+     * @param {number} tankSize 坦克尺寸
+     * @param {boolean} isPlayer 是否为玩家坦克
+     */
+    drawOtherTankTurret(tank, tankSize, isPlayer) {
+        // 重置Canvas变换，避免坦克主体旋转影响炮管
+        this.ctx.restore(); // 恢复到坦克主体旋转之前的状态
+        this.ctx.save();   // 重新保存状态
+        
+        // 重新设置坐标原点到坦克中心
+        const pixelX = tank.x * this.cellSize;
+        const pixelY = tank.y * this.cellSize;
+        const centerX = pixelX + this.cellSize / 2;
+        const centerY = pixelY + this.cellSize / 2;
+        this.ctx.translate(centerX, centerY);
+        
+        // 根据服务端gunfacing数据计算炮管角度
+        const gunRotation = this.getRotationFromDirection(tank.gunfacing);
+        this.ctx.rotate(gunRotation);
+        
+        // 绘制炮管
+        const gunLength = tankSize * 0.6;
+        const gunWidth = 6;
+        
+        this.ctx.fillStyle = '#ff6348';
+        this.ctx.fillRect(0, -gunWidth/2, gunLength, gunWidth);
+        
+        // 炮管末端
+        this.ctx.fillStyle = '#fd79a8';
+        this.ctx.fillRect(gunLength - 3, -gunWidth/2 - 2, 6, gunWidth + 4);
+        
+        // 炮管边框
+        this.ctx.strokeStyle = '#000000';
+        this.ctx.lineWidth = 1;
+        this.ctx.strokeRect(0, -gunWidth/2, gunLength, gunWidth);
+        
+        this.ctx.restore();
+        
+        // 重新设置坐标系绘制炮塔
+        this.ctx.save();
+        this.ctx.translate(centerX, centerY);
+        
+        // 绘制炮塔
+        this.ctx.fillStyle = '#ff9ff3';
+        this.ctx.beginPath();
+        this.ctx.arc(0, 0, tankSize * 0.3, 0, 2 * Math.PI);
+        this.ctx.fill();
+        
+        this.ctx.strokeStyle = '#000000';
+        this.ctx.lineWidth = 2;
+        this.ctx.stroke();
+        
+        this.ctx.restore(); // 恢复Canvas状态
+    }
+
+    /**
+     * 绘制坦克炮塔（旧版本，保留用于兼容）
+     * @param {number} gunfacing 炮管朝向
+     * @param {number} tankSize 坦克尺寸
+     * @param {boolean} isPlayer 是否为玩家坦克
+     */
+    drawTankTurret(gunfacing, tankSize, isPlayer) {
+        this.ctx.save();
+        
+        // 根据炮管方向旋转炮塔
+        const gunRotation = this.getRotationFromDirection(gunfacing);
+        this.ctx.rotate(gunRotation);
+        
+        // 绘制炮管
+        const gunLength = tankSize * 0.6;
+        const gunWidth = 6;
+        
+        this.ctx.fillStyle = isPlayer ? '#ffa502' : '#ff6348';
+        this.ctx.fillRect(0, -gunWidth/2, gunLength, gunWidth);
+        
+        // 炮管末端
+        this.ctx.fillStyle = isPlayer ? '#ff7675' : '#fd79a8';
+        this.ctx.fillRect(gunLength - 3, -gunWidth/2 - 2, 6, gunWidth + 4);
+        
+        // 炮管边框
+        this.ctx.strokeStyle = '#000000';
+        this.ctx.lineWidth = 1;
+        this.ctx.strokeRect(0, -gunWidth/2, gunLength, gunWidth);
+        
+        this.ctx.restore();
+        
+        // 绘制炮塔
+        this.ctx.fillStyle = isPlayer ? '#ffb8b8' : '#ff9ff3';
+        this.ctx.beginPath();
+        this.ctx.arc(0, 0, tankSize * 0.3, 0, 2 * Math.PI);
+        this.ctx.fill();
+        
+        this.ctx.strokeStyle = '#000000';
+        this.ctx.lineWidth = 2;
+        this.ctx.stroke();
+    }
+
+    /**
+     * 根据移动方向返回旋转角度
+     * @param {number} orientation 移动方向
+     * @returns {number} 旋转角度
+     */
+    getRotationFromOrientation(orientation) {
+        const rotations = {
+            1: Math.PI * 5/4,  // 左下
+            2: Math.PI * 3/2,  // 下
+            3: Math.PI * 7/4,  // 右下
+            4: Math.PI,        // 左
+            5: 0,              // 静止
+            6: 0,              // 右
+            7: Math.PI * 3/4,  // 左上
+            8: Math.PI / 2,    // 上
+            9: Math.PI / 4     // 右上
+        };
+        return rotations[orientation] || 0;
+    }
+
+    /**
+     * 根据方向代码返回旋转角度
+     * @param {number} direction 方向代码
+     * @returns {number} 旋转角度
+     */
+    getRotationFromDirection(direction) {
+        // 根据小键盘方向代码映射到正确的Canvas角度
+        // Canvas坐标系：0度=右，90度=下，180度=左，270度=上
+        const rotations = {
+            1: Math.PI * 3/4,    // 左下 (135度) - 修正：原来是225度，现在改为135度
+            2: Math.PI / 2,      // 下 (90度)
+            3: Math.PI / 4,      // 右下 (45度) - 修正：原来是315度，现在改为45度
+            4: Math.PI,          // 左 (180度)
+            5: 0,                // 静止/默认向右 (0度)
+            6: 0,                // 右 (0度)
+            7: Math.PI * 5/4,    // 左上 (225度) - 修正：原来是135度，现在改为225度
+            8: Math.PI * 3/2,    // 上 (270度)
+            9: Math.PI * 7/4     // 右上 (315度) - 修正：原来是45度，现在改为315度
+        };
+        return rotations[direction] || 0;
+    }
+
+    /**
+     * 更新性能统计
+     * @param {number} renderStart 渲染开始时间
+     */
+    updatePerformanceStats(renderStart) {
+        this.renderCount++;
+        this.frameCount++;
+        
+        const now = performance.now();
+        const renderTime = now - renderStart;
+        
+        // 每秒更新一次FPS
+        if (now - this.lastFpsTime >= 1000) {
+            this.currentFps = this.frameCount;
+            this.frameCount = 0;
+            this.lastFpsTime = now;
+            
+            // 在调试日志中显示性能信息
+            this.gameCore.log(`FPS: ${this.currentFps}, 渲染时间: ${renderTime.toFixed(2)}ms, 总渲染次数: ${this.renderCount}`, 'info');
+        }
+    }
+
+    /**
+     * 标记需要重新渲染
+     */
+    markForRender() {
+        this.needsRender = true;
+        this.scheduleRender();
+    }
+}

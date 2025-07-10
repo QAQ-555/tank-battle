@@ -1,0 +1,46 @@
+/**
+ * 坦克大战游戏主文件
+ * 协调各个模块，提供统一的游戏入口
+ */
+class TankGame {
+    constructor() {
+        this.gameCore = null;
+    }
+
+    /**
+     * 初始化游戏
+     */
+    init() {
+        // 创建游戏核心实例
+        this.gameCore = new GameCore();
+        
+        // 初始化游戏核心
+        this.gameCore.init();
+        
+        console.log('[TankGame] 坦克大战游戏初始化完成');
+    }
+
+    /**
+     * 获取游戏核心实例
+     * @returns {GameCore} 游戏核心实例
+     */
+    getGameCore() {
+        return this.gameCore;
+    }
+
+    /**
+     * 销毁游戏实例
+     */
+    destroy() {
+        if (this.gameCore) {
+            this.gameCore.disconnect();
+            this.gameCore = null;
+        }
+    }
+}
+
+// 当DOM加载完成时初始化游戏
+document.addEventListener('DOMContentLoaded', () => {
+    window.tankGame = new TankGame();
+    window.tankGame.init();
+});

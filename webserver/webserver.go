@@ -84,7 +84,7 @@ func readMessages(client *model.Client) {
 		model.ClientsMu.Unlock()
 		removeUsername(client.ID)
 		if client.Tank != nil {
-			freeTank(client.Tank)
+			FreeTank(client.Tank)
 			log.Printf("Freed spawn for %s\n", client.ID)
 		}
 
@@ -105,6 +105,7 @@ func readMessages(client *model.Client) {
 			continue
 		}
 		if op, ok := payload.(model.OperatePayload); ok {
+
 			moveDir := parseDirection(op.Up, op.Down, op.Left, op.Right)
 
 			client.LastActive = time.Now()
@@ -113,10 +114,18 @@ func readMessages(client *model.Client) {
 			if moveDir != model.DirNone {
 				client.Tank.GunFacing = moveDir
 			}
+
 			log.Printf("tank %s try move to %d", client.ID, client.Tank.Orientation)
 			if op.Action == "fire" && client.Tank.Reload == 0 { //接收到开火命令且已经装填完毕后将扳机置于开
 				log.Printf("tank %s try fire and already Reload", client.ID)
-				client.Tank.Trigger = true
+				se := OpenFire(client.Tank)
+				data, err := RePackWebMessageJson(3, se, "broadcast message gamer")
+				if err != nil {
+					log.Println("Failed to marshal game state:", err)
+					return
+				}
+				client.Conn.WriteMessage(websocket.TextMessage, data)
+
 			}
 			printTankShape(client.Tank)
 		} else {
