@@ -14,12 +14,13 @@ import (
 
 // 处理链接请求
 func Handler(w http.ResponseWriter, r *http.Request) {
+	//升级http
 	conn, err := model.UP.Upgrade(w, r, nil)
 	if err != nil {
 		log.Println("Upgrade error:", err)
 		return
 	}
-
+	//发送请求
 	notice := model.NoticePayload{
 		Notice: "websocket connect success",
 	}
@@ -30,7 +31,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	conn.WriteMessage(websocket.TextMessage, data)
-
+	//倒计时请求username
 	timeout := time.After(model.WAIT_REPLY_TIME * time.Second)
 	tick := time.NewTicker(100 * time.Millisecond)
 	defer tick.Stop()
@@ -45,8 +46,6 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		conn.Close()
 		return
 	}
-
-	log.Println("执行后续逻辑...")
 	// 后续逻辑...
 	tank := allocateTank()
 	if tank == nil {
@@ -75,6 +74,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 	log.Printf("New connection: %s at (%d,%d) facing %d\n",
 		username, tank.LocalX, tank.LocalY, tank.Orientation)
 	printTankShape(tank)
+	fmt.Printf("read begin")
 	go readMessages(client)
 }
 
@@ -96,8 +96,9 @@ func readMessages(client *model.Client) {
 
 	for {
 		_, msg, err := client.Conn.ReadMessage()
+		fmt.Printf("**********************************************")
 		if err != nil {
-			log.Printf("test Connection %s error: %v\n", client.ID, err)
+			log.Printf("Connection %s error: %v\n", client.ID, err)
 			break
 		}
 
@@ -124,8 +125,6 @@ func readMessages(client *model.Client) {
 		} else {
 			log.Printf("payload 不是 OperatePayload，而是：%T", payload)
 		}
-
-		//moveTank(client.Tank, moveDir)
 	}
 }
 
@@ -247,6 +246,7 @@ func WaitForCondition(conn *websocket.Conn, tick <-chan time.Time, timeout <-cha
 				return
 			}
 			msgCh <- msg
+			return
 		}
 	}()
 
@@ -264,7 +264,12 @@ func WaitForCondition(conn *websocket.Conn, tick <-chan time.Time, timeout <-cha
 			return false, ""
 
 		case msg := <-msgCh:
-			ok, _, username := processMessage(conn, msg)
+			log.Println("processMessage")
+			ok, username, err := processMessage(conn, msg)
+			if err != nil {
+				log.Printf("读取或解析出错: %v", err)
+				return false, ""
+			}
 			if ok {
 				log.Println("condition met")
 				return true, username
@@ -273,34 +278,36 @@ func WaitForCondition(conn *websocket.Conn, tick <-chan time.Time, timeout <-cha
 	}
 }
 
-func processMessage(conn *websocket.Conn, msg []byte) (bool, error, string) {
+func processMessage(conn *websocket.Conn, msg []byte) (bool, string, error) {
 	_, _, payload, err := UnpackWebMessage(msg)
+	fmt.Printf("%+v", payload)
 	if err != nil {
-		return false, fmt.Errorf("failed to parse message: %w", err), ""
+		return false, "", fmt.Errorf("failed to parse message: %w", err)
 	}
 
 	rp, ok := payload.(model.RequestPayload)
 	if !ok {
 		log.Printf("payload 不是 RequestPayload，而是：%T", payload)
-		return false, nil, ""
+		return false, "", nil
 	}
 
 	if rp.Success && isUsernameLegal(rp.Username) {
 		model.UsernameMu.Lock()
 		model.Usernames = append(model.Usernames, rp.Username)
 		model.UsernameMu.Unlock()
-		return true, nil, rp.Username
-	} else {
-		notice := model.NoticePayload{
-			Notice: "username is empty or already exists",
-		}
-
-		data, err := RePackWebMessageJson(0, notice, rp.Username)
-		if err != nil {
-			log.Println("Failed to marshal notice payload:", err)
-			return false, nil, ""
-		}
-		conn.WriteMessage(websocket.TextMessage, data)
+		return true, rp.Username, nil
 	}
-	return false, nil, ""
+
+	notice := model.NoticePayload{
+		Notice: "username is empty or already exists",
+	}
+
+	data, err := RePackWebMessageJson(0, notice, rp.Username)
+	if err != nil {
+		log.Println("Failed to marshal notice payload:", err)
+		return false, "", nil
+	}
+	conn.WriteMessage(websocket.TextMessage, data)
+
+	return false, "", nil
 }

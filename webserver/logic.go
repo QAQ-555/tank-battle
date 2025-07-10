@@ -3,52 +3,83 @@ package webserver
 import (
 	"fmt"
 	"log"
+	"time"
 
 	gamemap "example.com/lite_demo/map"
 	"example.com/lite_demo/model"
 )
 
+// 更新游戏状态
+func MapRenderloop() {
+	ticker := time.NewTicker(model.MAP_RENDER_MS * time.Millisecond)
+	defer ticker.Stop()
+
+	for range ticker.C {
+		// 遍历坦克，把每个活跃的坦克标记到地图上
+
+		model.SpawnTanksMu.Lock()
+		model.ShotEventsMu.Lock()
+		for _, t := range model.SpawnTanks {
+			//坦克移动
+			if t.Status == model.StatusTaken {
+				gamemap.MarkTankOnMap(t, 0)
+				moveTank(t)
+				if t.Trigger { //更新坦克状态时，如果坦克扳机按下则发射子弹
+					model.ShotEvents = append(model.ShotEvents, OpenFire(t))
+				}
+			}
+			//发射子弹
+		}
+		// for _, b := range activeBullets {
+
+		// }
+		model.SpawnTanksMu.Unlock()
+		model.ShotEventsMu.Unlock()
+		model.FlagChan <- true
+	}
+
+}
+
 // 开火
-func openFire(t *model.Tank) *model.Bullet {
-	var bullet model.Bullet
-	bullet.Facing = t.GunFacing
-	bullet.Speed = 2
-	bullet.Tank = t.ID
+func OpenFire(t *model.Tank) *model.ShotEvent {
+	var shotevent model.ShotEvent
+	shotevent.Facing = t.GunFacing
+	shotevent.Tank = t.ID
 	switch t.GunFacing {
 	case model.DirDown:
-		bullet.LocalX = t.LocalX
-		bullet.LocalY = t.LocalY + 2
+		shotevent.LocalX = t.LocalX
+		shotevent.LocalY = t.LocalY + 2
 	case model.DirUp:
-		bullet.LocalX = t.LocalX
-		bullet.LocalY = t.LocalY - 2
+		shotevent.LocalX = t.LocalX
+		shotevent.LocalY = t.LocalY - 2
 	case model.DirLeft:
-		bullet.LocalX = t.LocalX - 2
-		bullet.LocalY = t.LocalY
+		shotevent.LocalX = t.LocalX - 2
+		shotevent.LocalY = t.LocalY
 	case model.DirRight:
-		bullet.LocalX = t.LocalX + 2
-		bullet.LocalY = t.LocalY
+		shotevent.LocalX = t.LocalX + 2
+		shotevent.LocalY = t.LocalY
 	case model.DirUpLeft:
-		bullet.LocalX = t.LocalX - 2
-		bullet.LocalY = t.LocalY - 2
+		shotevent.LocalX = t.LocalX - 2
+		shotevent.LocalY = t.LocalY - 2
 	case model.DirUpRight:
-		bullet.LocalX = t.LocalX + 2
-		bullet.LocalY = t.LocalY - 2
+		shotevent.LocalX = t.LocalX + 2
+		shotevent.LocalY = t.LocalY - 2
 	case model.DirDownLeft:
-		bullet.LocalX = t.LocalX - 2
-		bullet.LocalY = t.LocalY + 2
+		shotevent.LocalX = t.LocalX - 2
+		shotevent.LocalY = t.LocalY + 2
 	case model.DirDownRight:
-		bullet.LocalX = t.LocalX + 2
-		bullet.LocalY = t.LocalY + 2
+		shotevent.LocalX = t.LocalX + 2
+		shotevent.LocalY = t.LocalY + 2
 	default:
 		// 如果方向未知，就放在坦克正中央
-		bullet.LocalX = t.LocalX
-		bullet.LocalY = t.LocalY
+		shotevent.LocalX = t.LocalX
+		shotevent.LocalY = t.LocalY
 	}
 	t.Reload = 500
 	t.Trigger = false
 	printTankShape(t)
-	log.Printf("shoting bullet=%+v\n", bullet)
-	return &bullet
+	log.Printf("shoting shotevent=%+v\n", shotevent)
+	return &shotevent
 }
 
 // 打印坦克
@@ -179,8 +210,8 @@ func GetActiveTanks() []*model.Tank {
 // 构建游戏状态结构体
 func BuildGameState() *model.GameState {
 	return &model.GameState{
-		Tanks:   GetActiveTanks(),
-		Bullets: model.ActiveBullets,
+		Tanks:      GetActiveTanks(),
+		ShotEvents: model.ShotEvents,
 		// Items: GetActiveItems(),
 		// Map: GetMap(),
 	}

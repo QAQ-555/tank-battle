@@ -42,14 +42,14 @@ var UP = websocket.Upgrader{
 } //websocket设置
 
 var (
-	Clients         = make(map[string]*Client)
-	ClientsMu       sync.Mutex
-	SpawnTanks      []*Tank
-	SpawnTanksMu    sync.Mutex
-	ActiveBullets   []*Bullet
-	ActiveBulletsMu sync.Mutex
-	Usernames       []string
-	UsernameMu      sync.Mutex
+	Clients      = make(map[string]*Client)
+	ClientsMu    sync.Mutex
+	SpawnTanks   []*Tank
+	SpawnTanksMu sync.Mutex
+	ShotEvents   []*ShotEvent
+	ShotEventsMu sync.Mutex
+	Usernames    []string
+	UsernameMu   sync.Mutex
 )
 
 // 通信壳
@@ -88,20 +88,19 @@ type Tank struct {
 
 // 游戏状态
 type GameState struct {
-	Tanks   []*Tank   `json:"tanks"`
-	Bullets []*Bullet `json:"bullets,omitempty"`
-	Map     []byte    `json:"map,omitempty"`
+	Tanks      []*Tank      `json:"tanks"`
+	ShotEvents []*ShotEvent `json:"ShotEvents,omitempty"`
+	Map        []byte       `json:"map,omitempty"`
 	//Items   []*Item   `json:"items,omitempty"`
 
 }
 
 // 子弹状态
-type Bullet struct {
-	Tank   string  `json:"shoter"`
-	LocalX uint    `json:"x"`
-	LocalY uint    `json:"y"`
-	Facing byte    `json:"orientation"`
-	Speed  float64 `json:"speed"`
+type ShotEvent struct {
+	Tank   string `json:"shoter"`
+	LocalX uint   `json:"x"`
+	LocalY uint   `json:"y"`
+	Facing byte   `json:"orientation"`
 }
 
 // 客户端信息

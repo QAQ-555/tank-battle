@@ -2,7 +2,6 @@ package gamemap
 
 import (
 	"log"
-	"time"
 
 	"example.com/lite_demo/model"
 )
@@ -36,37 +35,6 @@ func MarkTankOnMap(t *model.Tank, val byte) {
 			}
 		}
 	}
-}
-
-// 更新游戏状态
-func MapRenderloop() {
-	ticker := time.NewTicker(model.MAP_RENDER_MS * time.Millisecond)
-	defer ticker.Stop()
-
-	for range ticker.C {
-		// 遍历坦克，把每个活跃的坦克标记到地图上
-
-		model.SpawnTanksMu.Lock()
-		model.ActiveBulletsMu.Lock()
-		for _, t := range model.SpawnTanks {
-			//坦克移动
-			if t.Status == model.StatusTaken {
-				MarkTankOnMap(t, 0)
-				moveTank(t)
-				// if t.Trigger { //更新坦克状态时，如果坦克扳机按下则发射子弹
-				// 	activeBullets = append(activeBullets, openFire(t))
-				// }
-			}
-			//发射子弹
-		}
-		// for _, b := range activeBullets {
-
-		// }
-		model.SpawnTanksMu.Unlock()
-		model.ActiveBulletsMu.Unlock()
-		model.FlagChan <- true
-	}
-
 }
 
 func moveTank(t *model.Tank) {
