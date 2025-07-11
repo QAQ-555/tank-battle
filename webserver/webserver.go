@@ -79,7 +79,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 	log.Printf("🎮 New connection: %s at (%d,%d) facing %d\n",
 		username, tank.LocalX, tank.LocalY, tank.Orientation)
 
-	printTankShape(tank)
+	//printTankShape(tank)
 
 	// 启动客户端消息读取 goroutine
 	go readMessages(client)
@@ -154,7 +154,7 @@ func readMessages(client *model.Client) {
 				model.ClientsMu.Unlock()
 			}
 
-			printTankShape(client.Tank)
+			//printTankShape(client.Tank)
 
 		} else {
 			log.Printf("⚠️ payload 不是 OperatePayload，而是：%T", payload)
@@ -233,7 +233,7 @@ func UnpackWebMessage(data []byte) (byte, string, interface{}, error) {
 	if err != nil {
 		return 0, "", nil, err
 	}
-
+	log.Printf("%+v", mes)
 	// 因为 Payload 是 interface{}，它现在是 map[string]interface{}
 	// 所以我们先把它再 Marshal 一次，得到原始 JSON
 	payloadBytes, err := json.Marshal(mes.Payload)
@@ -261,7 +261,7 @@ func UnpackWebMessage(data []byte) (byte, string, interface{}, error) {
 	default:
 		return 0, "", nil, fmt.Errorf("unknown message type: %d", mes.Type)
 	}
-
+	log.Printf("%+v", payload)
 	return mes.Type, mes.ID, payload, nil
 }
 

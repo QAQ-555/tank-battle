@@ -10,6 +10,8 @@ import (
 	"example.com/lite_demo/model"
 )
 
+var TANK_RELOAD_VALUE = model.TANK_RELOAD_SECONDS * 1000 / model.MAP_RENDER_MS * 5
+
 // 更新游戏状态
 func MapRenderloop() {
 	ticker := time.NewTicker(model.MAP_RENDER_MS * time.Millisecond)
@@ -51,37 +53,9 @@ func OpenFire(t *model.Tank) *model.ShotEvent {
 	var shotevent model.ShotEvent
 	shotevent.Facing = t.GunFacing
 	shotevent.Tank = t.ID
-	switch t.GunFacing {
-	case model.DirDown:
-		shotevent.LocalX = t.LocalX
-		shotevent.LocalY = t.LocalY + 2
-	case model.DirUp:
-		shotevent.LocalX = t.LocalX
-		shotevent.LocalY = t.LocalY - 2
-	case model.DirLeft:
-		shotevent.LocalX = t.LocalX - 2
-		shotevent.LocalY = t.LocalY
-	case model.DirRight:
-		shotevent.LocalX = t.LocalX + 2
-		shotevent.LocalY = t.LocalY
-	case model.DirUpLeft:
-		shotevent.LocalX = t.LocalX - 2
-		shotevent.LocalY = t.LocalY - 2
-	case model.DirUpRight:
-		shotevent.LocalX = t.LocalX + 2
-		shotevent.LocalY = t.LocalY - 2
-	case model.DirDownLeft:
-		shotevent.LocalX = t.LocalX - 2
-		shotevent.LocalY = t.LocalY + 2
-	case model.DirDownRight:
-		shotevent.LocalX = t.LocalX + 2
-		shotevent.LocalY = t.LocalY + 2
-	default:
-		// 如果方向未知，就放在坦克正中央
-		shotevent.LocalX = t.LocalX
-		shotevent.LocalY = t.LocalY
-	}
-	t.Reload = 50
+	shotevent.LocalX = t.LocalX
+	shotevent.LocalY = t.LocalY
+	t.Reload = uint(TANK_RELOAD_VALUE)
 	t.Trigger = false
 	printTankShape(t)
 	log.Printf("shoting shotevent=%+v\n", shotevent)
@@ -149,12 +123,12 @@ func moveTank(t *model.Tank) {
 	newY := int(t.LocalY) + dy
 
 	if !isWithinBounds(newX, newY) {
-		log.Printf("Tank at (%d,%d) cannot move %v — out of bounds", t.LocalX, t.LocalY, t.Orientation)
+		//log.Printf("Tank at (%d,%d) cannot move %v — out of bounds", t.LocalX, t.LocalY, t.Orientation)
 		return
 	}
 
 	if !canMoveTo(newX, newY) {
-		log.Printf("Tank at (%d,%d) cannot move %v — blocked", t.LocalX, t.LocalY, t.Orientation)
+		//log.Printf("Tank at (%d,%d) cannot move %v — blocked", t.LocalX, t.LocalY, t.Orientation)
 		return
 	}
 
@@ -162,7 +136,7 @@ func moveTank(t *model.Tank) {
 	t.LocalX = uint(newX)
 	t.LocalY = uint(newY)
 
-	log.Printf("Tank %s moved to (%d,%d) facing %d", t.ID, t.LocalX, t.LocalY, t.Orientation)
+	//log.Printf("Tank %s moved to (%d,%d) facing %d", t.ID, t.LocalX, t.LocalY, t.Orientation)
 }
 
 // 根据方向返回 dx, dy
