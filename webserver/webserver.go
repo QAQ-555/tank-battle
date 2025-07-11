@@ -92,126 +92,102 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 
 // 处理客户端指令
 func readMessages(client *model.Client) {
-	// 断开连接后释放资源
-	defer func() {
-		client.Conn.Close()
-
-		model.ClientsMu.Lock()
-		delete(model.Clients, client.ID)
-		model.ClientsMu.Unlock()
-
-		removeUsername(client.ID)
-
-		if client.Tank != nil {
-			FreeTank(client.Tank)
-			log.Printf("✅ Freed spawn for %s\n", client.ID)
-		}
-
-		log.Printf("🔌 Connection %s closed\n", client.ID)
-	}()
+	defer cleanUpClient(client)
 
 	for {
-		// 读取客户端消息
 		_, msg, err := client.Conn.ReadMessage()
 		if err != nil {
 			log.Printf("⚠️ Connection %s error: %v\n", client.ID, err)
 			break
 		}
 
-		// 解析客户端发送的 JSON 消息
 		_, _, payload, err := UnpackWebMessage(msg)
 		if err != nil {
 			log.Printf("❌ Failed to parse JSON from %s: %v", client.ID, err)
 			continue
 		}
-		// 判断 payload 类型
-		if op, ok := payload.(model.OperatePayload); ok {
-			// 更新方向
-			moveDir := parseDirection(op.Up, op.Down, op.Left, op.Right)
-			log.Println(payload)
-			client.LastActive = time.Now()
-			client.Tank.Orientation = moveDir
 
-			if moveDir != model.DirNone {
-				client.Tank.GunFacing = moveDir
-			}
+		handlePayload(client, payload)
+	}
+}
 
-			// 检查是否开火
-			if op.Action == "fire" && client.Tank.Reload == 0 {
-				log.Printf("🔥 tank %s fires (reload OK)", client.ID)
+func cleanUpClient(client *model.Client) {
+	client.Conn.Close()
+	model.ClientsMu.Lock()
+	delete(model.Clients, client.ID)
+	model.ClientsMu.Unlock()
+	removeUsername(client.ID)
 
-				se := OpenFire(client.Tank)
+	if client.Tank != nil {
+		FreeTank(client.Tank)
+		log.Printf("✅ Freed spawn for %s\n", client.ID)
+	}
 
-				data, err := RePackWebMessageJson(3, se, "broadcast message gamer")
-				if err != nil {
-					log.Println("Failed to marshal game state:", err)
-					return
-				}
+	log.Printf("🔌 Connection %s closed\n", client.ID)
+}
 
-				// 广播开火消息
-				model.ClientsMu.Lock()
-				for _, c := range model.Clients {
-					if err := c.Conn.WriteMessage(websocket.TextMessage, data); err != nil {
-						log.Printf("Error sending to %s: %v\n", c.ID, err)
-					}
-				}
-				model.ClientsMu.Unlock()
-			}
+func handlePayload(client *model.Client, payload any) {
+	switch p := payload.(type) {
+	case model.OperatePayload:
+		handleOperatePayload(client, p)
+	case model.HitPayload:
+		handleHitPayload(client, p)
+	default:
+		log.Printf("⚠️ Unknown payload type: %T", payload)
+	}
+}
 
-			//printTankShape(client.Tank)
+func handleOperatePayload(client *model.Client, op model.OperatePayload) {
+	moveDir := parseDirection(op.Up, op.Down, op.Left, op.Right)
+	log.Println(op)
+	client.LastActive = time.Now()
+	client.Tank.Orientation = moveDir
 
-		} else if oh, ok := payload.(model.HitPayload); ok {
-			data, err := RePackWebMessageJson(5, oh, "broadcast message gamer")
-			if err != nil {
-				log.Println("Failed to marshal game state:", err)
-				return
-			}
-			log.Println("HitPayload")
-			model.ClientsMu.Lock()
-			for _, c := range model.Clients {
-				if err := c.Conn.WriteMessage(websocket.TextMessage, data); err != nil {
-					log.Printf("Error sending to %s: %v\n", c.ID, err)
-				}
-			}
-			model.ClientsMu.Unlock()
+	if moveDir != model.DirNone {
+		client.Tank.GunFacing = moveDir
+	}
 
-			for _, t := range model.SpawnTanks {
-				if t.ID == oh.Victim {
-					FreeTank(t)
-					removeUsername(t.ID)
-					// notice := model.NoticePayload{
-					// 	Notice: "you failed",
-					// }
-					// data, err := RePackWebMessageJson(6, notice, t.ID)
-					// if err != nil {
-					// 	log.Println("Failed to marshal notice payload:", err)
-					// 	return
-					// }
-					// client.Conn.WriteMessage(websocket.TextMessage, data)
-					return
-				}
-			}
-		} else {
-			log.Printf("⚠️ payload 不是 OperatePayload，而是：%T", payload)
+	if op.Action == "fire" && client.Tank.Reload == 0 {
+		log.Printf("🔥 tank %s fires (reload OK)", client.ID)
+		se := OpenFire(client.Tank)
+
+		data, err := RePackWebMessageJson(3, se, "broadcast message gamer")
+		if err != nil {
+			log.Println("Failed to marshal fire event:", err)
+			return
+		}
+
+		broadcastToAll(data)
+	}
+}
+
+func handleHitPayload(client *model.Client, hit model.HitPayload) {
+	data, err := RePackWebMessageJson(7, hit, "broadcast message gamer")
+	if err != nil {
+		log.Println("Failed to marshal hit event:", err)
+		return
+	}
+	log.Println("HitPayload")
+	broadcastToAll(data)
+
+	for _, t := range model.SpawnTanks {
+		if t.ID == hit.Victim {
+			FreeTank(t)
+			removeUsername(t.ID)
 		}
 	}
 }
 
-//	else if oh, ok := payload.(model.HitPayload); ok {
-//				model.ClientsMu.Lock()
-//				data, err := RePackWebMessageJson(5, oh, "broadcast message gamer")
-//				if err != nil {
-//					log.Println("Failed to marshal game state:", err)
-//					return
-//				}
-//				for _, c := range model.Clients {
-//					if err := c.Conn.WriteMessage(websocket.TextMessage, data); err != nil {
-//						log.Printf("Error sending to %s: %v\n", c.ID, err)
-//					}
-//				}
-//			}
-//
-// 广播地图
+func broadcastToAll(data []byte) {
+	model.ClientsMu.Lock()
+	defer model.ClientsMu.Unlock()
+	for _, c := range model.Clients {
+		if err := c.Conn.WriteMessage(websocket.TextMessage, data); err != nil {
+			log.Printf("Error sending to %s: %v\n", c.ID, err)
+		}
+	}
+}
+
 func BroadcastLoop() {
 	ticker := time.NewTicker(model.TICK_INTERVAL_MS * time.Millisecond)
 	defer ticker.Stop()
@@ -229,13 +205,34 @@ func BroadcastGameState() {
 		log.Println("Failed to marshal game state:", err)
 		return
 	}
+
+	var disconnectedClients []string
+
 	model.ClientsMu.Lock()
-	defer model.ClientsMu.Unlock()
 	for _, c := range model.Clients {
 		if err := c.Conn.WriteMessage(websocket.TextMessage, data); err != nil {
 			log.Printf("Error sending to %s: %v\n", c.ID, err)
+			disconnectedClients = append(disconnectedClients, c.ID)
 		}
 	}
+
+	// 移除断开连接的客户端并清理资源
+	for _, id := range disconnectedClients {
+		if client, exists := model.Clients[id]; exists {
+			// 清理坦克资源
+			if client.Tank != nil {
+				FreeTank(client.Tank)
+			}
+			// 从用户名注册表中移除
+			removeUsername(id)
+			// 关闭连接
+			client.Conn.Close()
+			// 从客户端映射中删除
+			delete(model.Clients, id)
+			log.Printf("Removed disconnected client: %s\n", id)
+		}
+	}
+	model.ClientsMu.Unlock()
 }
 
 // 链接建立时 发送所需数据
