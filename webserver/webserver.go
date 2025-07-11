@@ -158,6 +158,9 @@ func readMessages(client *model.Client) {
 
 			//printTankShape(client.Tank)
 
+		} else if oc, ok := payload.(model.OperatePayload); ok {
+			log.Println(oc)
+			log.Printf("⚠️ payload 不是 OperatePayload，而是：%T", payload)
 		} else {
 			log.Printf("⚠️ payload 不是 OperatePayload，而是：%T", payload)
 		}
