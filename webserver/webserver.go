@@ -70,7 +70,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 	sendConfig(conn, client.ID, tank)
 	log.Printf("New connection: %s at (%d,%d) facing %d\n",
 		username, tank.LocalX, tank.LocalY, tank.Orientation)
-	printTankShape(tank)
+	//printTankShape(tank)
 	go readMessages(client)
 }
 
@@ -92,7 +92,7 @@ func readMessages(client *model.Client) {
 
 	for {
 		_, msg, err := client.Conn.ReadMessage()
-		fmt.Printf("**********************************************")
+		//fmt.Printf("**********************************************")
 		if err != nil {
 			log.Printf("Connection %s error: %v\n", client.ID, err)
 			break
@@ -117,7 +117,7 @@ func readMessages(client *model.Client) {
 				log.Printf("tank %s try fire and already Reload", client.ID)
 				client.Tank.Trigger = true
 			}
-			printTankShape(client.Tank)
+			//printTankShape(client.Tank)
 		} else {
 			log.Printf("payload 不是 OperatePayload，而是：%T", payload)
 		}
@@ -131,7 +131,6 @@ func BroadcastLoop() {
 
 	for range ticker.C {
 		BroadcastGameState()
-		<-model.FlagChan
 	}
 }
 
@@ -244,6 +243,7 @@ func WaitForCondition(conn *websocket.Conn) (bool, string) {
 		for {
 			// log.Println("[goroutine] 开始 ReadMessage")
 			_, msg, err := conn.ReadMessage()
+			log.Println(msg)
 			if err != nil {
 				// log.Println("[goroutine] ReadMessage 出错:", err)
 
@@ -280,7 +280,7 @@ func WaitForCondition(conn *websocket.Conn) (bool, string) {
 	}()
 
 	for {
-		// log.Println("[WaitForCondition] 等待 select")
+		log.Println("[WaitForCondition] 等待 select")
 		select {
 		case <-timeoutCh:
 			// log.Println("[WaitForCondition] 从 timeoutCh 收到信号")
@@ -290,7 +290,7 @@ func WaitForCondition(conn *websocket.Conn) (bool, string) {
 			return false, "timeout"
 
 		case msg := <-msgCh:
-			// log.Println("[WaitForCondition] 从 msgCh 收到:", string(msg))
+			log.Println("[WaitForCondition] 从 msgCh 收到:", string(msg))
 			readNext, username, err := processMessage(conn, msg)
 			// log.Println("[WaitForCondition] processMessage 返回:", readNext, username, err)
 

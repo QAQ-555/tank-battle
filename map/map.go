@@ -93,5 +93,5 @@ func moveTank(t *model.Tank) {
 	// 标记新位置
 	//markTankOnMap(t, 1)
 
-	log.Printf("tank %s moved to (%d,%d) facing %d", t.ID, t.LocalX, t.LocalY, t.Orientation)
+	//log.Printf("tank %s moved to (%d,%d) facing %d", t.ID, t.LocalX, t.LocalY, t.Orientation)
 }

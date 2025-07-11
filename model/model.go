@@ -13,9 +13,9 @@ var FlagChan = make(chan bool)
 const (
 	MAP_SIZE_X       uint = 1542
 	MAP_SIZE_Y       uint = 512
-	TICK_INTERVAL_MS      = 1000
-	MAP_RENDER_MS         = 1000
-	WAIT_REPLY_TIME       = 60
+	TICK_INTERVAL_MS      = 50
+	MAP_RENDER_MS         = 50
+	WAIT_REPLY_TIME       = 5
 ) //建立链接发送数据
 
 const (
@@ -91,6 +91,7 @@ type GameState struct {
 	Tanks      []*Tank      `json:"tanks"`
 	ShotEvents []*ShotEvent `json:"ShotEvents,omitempty"`
 	Map        []byte       `json:"map,omitempty"`
+	Time_now   string       `json"time"`
 	//Items   []*Item   `json:"items,omitempty"`
 
 }

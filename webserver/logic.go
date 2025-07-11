@@ -35,7 +35,6 @@ func MapRenderloop() {
 		// }
 		model.SpawnTanksMu.Unlock()
 		model.ShotEventsMu.Unlock()
-		model.FlagChan <- true
 	}
 
 }
@@ -77,8 +76,8 @@ func OpenFire(t *model.Tank) *model.ShotEvent {
 	}
 	t.Reload = 500
 	t.Trigger = false
-	printTankShape(t)
-	log.Printf("shoting shotevent=%+v\n", shotevent)
+	//printTankShape(t)
+	//log.Printf("shoting shotevent=%+v\n", shotevent)
 	return &shotevent
 }
 
@@ -190,7 +189,7 @@ func moveTank(t *model.Tank) {
 	// 标记新位置
 	//markTankOnMap(t, 1)
 
-	log.Printf("tank %s moved to (%d,%d) facing %d", t.ID, t.LocalX, t.LocalY, t.Orientation)
+	//log.Printf("tank %s moved to (%d,%d) facing %d", t.ID, t.LocalX, t.LocalY, t.Orientation)
 }
 
 // 获取所有活动中坦克
@@ -212,6 +211,7 @@ func BuildGameState() *model.GameState {
 	return &model.GameState{
 		Tanks:      GetActiveTanks(),
 		ShotEvents: model.ShotEvents,
+		Time_now:   time.Now().Format("2006-01-02 15:04:05"),
 		// Items: GetActiveItems(),
 		// Map: GetMap(),
 	}
