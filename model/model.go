@@ -99,7 +99,7 @@ type GameState struct {
 
 // 发射活动
 type ShotEvent struct {
-	Tank   string `json:"shoter"`
+	Tank   string `json:"username"`
 	LocalX uint   `json:"x"`
 	LocalY uint   `json:"y"`
 	Facing byte   `json:"orientation"`
@@ -125,6 +125,11 @@ type OperatePayload struct {
 type RequestPayload struct {
 	Username string `json:"username"`
 	Success  bool   `json:"success"`
+}
+
+type HitPayload struct {
+	Username string `json:"username"`
+	Victim   string `json:"victim"`
 }
 
 type NoticePayload struct {

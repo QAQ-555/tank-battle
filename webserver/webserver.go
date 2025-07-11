@@ -12,6 +12,10 @@ import (
 	"github.com/gorilla/websocket"
 )
 
+type RequestHandler interface {
+	RequestHandler(client *model.Client)
+}
+
 // 处理链接请求
 // 处理链接请求
 func Handler(w http.ResponseWriter, r *http.Request) {
@@ -44,7 +48,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		conn.Close() // 关闭连接，释放资源
 		return
 	}
-
+	// username = uuid.NewString()
 	// 为客户端分配坦克
 	tank := allocateTank()
 	if tank == nil {
@@ -55,7 +59,6 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			log.Println("Failed to marshal game state:", err)
 			return
 		}
-
 		conn.WriteMessage(websocket.TextMessage, data)
 		conn.Close()
 		removeUsername(username)
@@ -121,12 +124,11 @@ func readMessages(client *model.Client) {
 			log.Printf("❌ Failed to parse JSON from %s: %v", client.ID, err)
 			continue
 		}
-
 		// 判断 payload 类型
 		if op, ok := payload.(model.OperatePayload); ok {
 			// 更新方向
 			moveDir := parseDirection(op.Up, op.Down, op.Left, op.Right)
-
+			log.Println(payload)
 			client.LastActive = time.Now()
 			client.Tank.Orientation = moveDir
 
@@ -158,12 +160,57 @@ func readMessages(client *model.Client) {
 
 			//printTankShape(client.Tank)
 
+		} else if oh, ok := payload.(model.HitPayload); ok {
+			data, err := RePackWebMessageJson(5, oh, "broadcast message gamer")
+			if err != nil {
+				log.Println("Failed to marshal game state:", err)
+				return
+			}
+			log.Println("HitPayload")
+			model.ClientsMu.Lock()
+			for _, c := range model.Clients {
+				if err := c.Conn.WriteMessage(websocket.TextMessage, data); err != nil {
+					log.Printf("Error sending to %s: %v\n", c.ID, err)
+				}
+			}
+			model.ClientsMu.Unlock()
+
+			for _, t := range model.SpawnTanks {
+				if t.ID == oh.Victim {
+					FreeTank(t)
+					removeUsername(t.ID)
+					// notice := model.NoticePayload{
+					// 	Notice: "you failed",
+					// }
+					// data, err := RePackWebMessageJson(6, notice, t.ID)
+					// if err != nil {
+					// 	log.Println("Failed to marshal notice payload:", err)
+					// 	return
+					// }
+					// client.Conn.WriteMessage(websocket.TextMessage, data)
+					return
+				}
+			}
 		} else {
 			log.Printf("⚠️ payload 不是 OperatePayload，而是：%T", payload)
 		}
 	}
 }
 
+//	else if oh, ok := payload.(model.HitPayload); ok {
+//				model.ClientsMu.Lock()
+//				data, err := RePackWebMessageJson(5, oh, "broadcast message gamer")
+//				if err != nil {
+//					log.Println("Failed to marshal game state:", err)
+//					return
+//				}
+//				for _, c := range model.Clients {
+//					if err := c.Conn.WriteMessage(websocket.TextMessage, data); err != nil {
+//						log.Printf("Error sending to %s: %v\n", c.ID, err)
+//					}
+//				}
+//			}
+//
 // 广播地图
 func BroadcastLoop() {
 	ticker := time.NewTicker(model.TICK_INTERVAL_MS * time.Millisecond)
@@ -235,9 +282,6 @@ func UnpackWebMessage(data []byte) (byte, string, interface{}, error) {
 	if err != nil {
 		return 0, "", nil, err
 	}
-	//log.Printf("%+v", mes)
-	// 因为 Payload 是 interface{}，它现在是 map[string]interface{}
-	// 所以我们先把它再 Marshal 一次，得到原始 JSON
 	payloadBytes, err := json.Marshal(mes.Payload)
 	if err != nil {
 		return 0, "", nil, err
@@ -252,10 +296,14 @@ func UnpackWebMessage(data []byte) (byte, string, interface{}, error) {
 			return 0, "", nil, err
 		}
 		payload = op
-		//log.Printf("%+v", op)
-		//log.Printf("%+v", payload)
 	case 16:
 		var tp model.RequestPayload
+		if err := json.Unmarshal(payloadBytes, &tp); err != nil {
+			return 0, "", nil, err
+		}
+		payload = tp
+	case 17:
+		var tp model.HitPayload
 		if err := json.Unmarshal(payloadBytes, &tp); err != nil {
 			return 0, "", nil, err
 		}
@@ -263,7 +311,6 @@ func UnpackWebMessage(data []byte) (byte, string, interface{}, error) {
 	default:
 		return 0, "", nil, fmt.Errorf("unknown message type: %d", mes.Type)
 	}
-	//log.Printf("%+v", payload)
 	return mes.Type, mes.ID, payload, nil
 }
 

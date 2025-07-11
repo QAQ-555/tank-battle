@@ -1,168 +1,368 @@
-# 0 坦克大战后端接口
-接口地址```192.168.10.233:8888/ws```
-通过websocket，以玩家身份加入游戏，会在游戏中创建一个对应的坦克对象
-# 1数据传递方法
+# 坦克大战后端接口文档
+
+
+## 接口地址
+
+
+| 功能          | 地址                                     |
+|---------------|------------------------------------------|
+| 玩家接入游戏  | `ws://192.168.10.233:8888/ws`           |
+| 最新测试页面  | `ws://192.168.10.233:8887/ws`           |
+| 地图阅览      | `ws://192.168.10.233:8887/mapws`        |
+
+
+---
+
+
+## 建立连接流程
+
+
+1. 客户端通过 WebSocket 连接到服务器：
+   ```
+   ws://192.168.10.233:8888/ws
+   ```
+2. 连接成功后，服务端会发送一条提示消息：
+   ```json
+   {
+       "type": 0,
+       "id": "perpartext",
+       "payload": {
+           "notice": "websocket connect success"
+       }
+   }
+   ```
+3. 客户端收到后需要在规定时间内发送注册请求：
+   ```json
+   {
+       "type": 16,
+       "id": "",
+       "payload": {
+           "username": "你的用户名",
+           "success": true
+       }
+   }
+   ```
+4. 如果注册失败（例如用户名为空或重复），服务端会返回提示消息：
+   ```json
+   {
+       "type": 4,
+       "id": "用户名",
+       "payload": {
+           "notice": "username is empty or already exists"
+       }
+   }
+   ```
+5. 注册成功后，服务端返回地图和玩家初始信息（见 [type=1](#type-1-连接建立后初始化数据)）。
+
+
+---
+
+
+## 消息格式
+
+
+客户端和服务端均使用 JSON 格式通信，统一结构如下：
+
+
 ```json
 {
-    "type": 15, //消息类型 byte
-    "id": "4e3a8178-4f1b-44ff-959f-197f7ca84979" //消息目标id sting
-    "payload": {
-
-    } //传递数据
+    "type": 15,
+    "id": "4e3a8178-4f1b-44ff-959f-197f7ca84979",
+    "payload": { ... }
 }
 ```
-当前数据传递均由json进行，约定接收发送数据时使用以上结构的json
-tpye进行payload类型的标识
-type < 15 服务端发送数据
+| 参数名 | 说明                     |内容|
+|------|--------------------------|------|
+| type| payload内容类型            |见消息类型|
+| id | 通信目标                 |见消息类型|
+| payload | 数据内容                 | 见消息类型|
+---
 
-type == 0 服务端发送提示数据
-```
-"payload": {
-        "notice": "username is empty or already exists"
-    }
-```
-服务端进行相应而发送的文本消息
 
-type == 1 链接建立时发送所需数据，id为目标客户端32字节长度字符串，payload见 [2.1](#21-链接建立)
-type == 2 游戏状态广播，id通用字符串如```broadcast message gamer```，payload见[2.2](#22-数据广播)
+## 消息类型
 
-type >= 15 客户端发送数据
-type == 15 坦克操作代码 操作tank时数据，id为发起客户端32字节长度字符串，payload见[3.1](#31-坦克操作指令)
 
-type == 16 注册请求，详见 [2.1](#21-链接建立)
+当服务端发送信息时，id会设置为broadcast message或设置为目标id
 
-# 2 服务器消息payload
-## 2.1 链接建立
-通过接口进行websocket链接成功时，客户端会收到
+
+### 服务端发送 (type < 15)
+
+
+| type | 说明                     |
+|------|--------------------------|
+| [0](#type-0-提示消息)    | 提示消息                 |
+| [1](#type-1-连接建立后初始化数据)    | 连接建立后初始化数据       |
+| [2](#type-2-游戏状态广播)    | 游戏状态广播             |
+| [3](#type-3-射击事件广播)    | 射击事件广播             |
+| [4](#type-4-错误提示)        | 错误提示                 |
+| [5](#type-5-错误提示)        | 击中事件广播                 |
+
+
+### 客户端发送 (type >= 15)
+
+
+| type | 说明                     |
+|------|--------------------------|
+| [15](#type-15-坦克操作指令)   | 坦克操作指令             |
+| [16](#type-16-注册请求)       | 注册请求                 |
+| [17](#type-17-击中事件)       | 击中汇报                 |
+
+
+---
+
+
+## payload 详情
+
+
+### type=0 提示消息
+
+
 ```json
 {
-    "type": 0,
-    "id": "perpartext",
-    "payload": {
-        "notice": "websocket connect success"
-    }
+    "type": 0,
+    "id": "perpartext",
+    "payload": {
+        "notice": "websocket connect success"
+    }
 }
 ```
-代表客户端已经成功与服务端建立链接，之后需要在规定时间内发送
+| 字段名 | 说明            |类型|
+|---------|--------------|--|
+|notice|提示内容|string|
+---
+
+
+### type=1 连接建立后初始化数据
+
+
+客户端注册成功后，服务端返回地图和玩家初始信息：
+
+
 ```json
 {
-    "type": 16,
-    "id": "",
-    "payload": {
-        "username":"qaq_555", //string
-        "success":true    //发送true以注册
-    }
+    "payload": {
+        "map": "AQEBAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "map_size_x": 30,
+        "map_size_y": 30,
+        "tank_coord_x": 1,
+        "tank_coord_y": 1,
+        "tank_facing": 2,
+        "tick_interval_ms": 50,
+        "map_render_ms": 500,
+        "username": "QAQ-555"
+    }
 }
 ```
-username为玩家身份的唯一标识
+| 字段名 | 说明                     |类型|
+|------|--------------------------|----|
+| map |地图序列字符串             |[]byte
+| map_size_x |地图宽度             |uint|
+| map_size_y |地图长度             |uint|
+| tank_coord_x |控制坦克x轴坐标    |uint|
+| tank_coord_x |控制坦克y轴坐标    |uint|
+|tank_facing|坦克面向|byte|
+|tick_interval_ms|服务器广播率|int|
+|map_render_ms|地图刷新率|byte|
+|username|注册用户名|string|
+---
 
-而因为重复等原因注册失败时会有
+
+### type=2 游戏状态广播
+
+
+注册后，每隔 `tick_interval_ms` 毫秒，服务端广播当前地图上所有坦克状态：
+
+
 ```json
 {
-    "type": 0,
-    "id": "888",
-    "payload": {
-        "notice": "username is empty or already exists"
-    }
+    "payload": {
+        "tanks": [
+            {
+                "x": 1,
+                "y": 1,
+                "reload": 0,
+                "trigger": false,
+                "gunfacing": 2,
+                "status": 1,
+                "orientation": 5,
+                "id": "ae9f7384-02b5-4407-8bab-4203beffc13a"
+            }
+        ]
+    }
 }
 ```
-成功注册时，会收到由客户端发送来的地图与连接相关数据，如下所示
+|字段名|说明|类型|
+|----|----|-----|
+|x|坦克x轴坐标|uint|
+|y|坦克y轴坐标|uint|
+|reload|坦克发射cd|uint|
+|trigger|坦克扳机|bool|
+|gunfacing|炮管面向|byte|
+|status|坦克状态|byte|
+|orientation|坦克前进方向|byte|
+|id|坦克控制者username|sting|
+#### 方向代码
+游戏状态广播中`gunfacing`与`orientation`会使用如下表的值来说明方向
+```
+7 8 9
+4 5 6
+1 2 3
+```
+
+
+| 值  | 说明 |
+|-----|------|
+| 7   | 左上 |
+| 8   | 上   |
+| 9   | 右上 |
+| 4   | 左   |
+| 5   | 静止 |
+| 6   | 右   |
+| 1   | 左下 |
+| 2   | 下   |
+| 3   | 右下 |
+
+
+---
+
+
+### type=3 射击事件广播
+
+
+服务端广播射击事件：
+
+
 ```json
 {
-    "type": 1,
-    "id": "test",
-    "payload": {
-        "map":"AAAAAA",      //地图字节序列
-        "map_size_x": 1542,  //地图尺寸
-        "map_size_y": 512,   //
-        "tank_coord_x": 1,   //控制坦克坐标
-        "tank_coord_y": 1,
-        "tank_facing": 2,    //坦克面向
-        "tick_interval_ms": 1000, //服务端参数
-        "map_render_ms": 1000,
-        "username": "test"   //用户名
-    }
+    "type": 3,
+    "id": "broadcast message gamer",
+    "payload": {
+        "username": "888",
+        "x": 68,
+        "y": 73,
+        "orientation": 2
+    }
 }
 ```
-客户端需要利用地图数据构建地图用于后续渲染，并保留id用于向服务端发送请求
+|字段名|说明|类型|
+|----|---|----|
+|username|发起射击的用户名|string|
+|x|发起射击的位置x轴坐标|uint|
+|y|发起射击的位置y轴坐标|uint|
+|orientation|发射子弹时的方向|byte|
+---
 
-map为[map_size_y][map_size_x]byte序列化生成，需要利用map_size_y与map_size_x进行反序列化
- (0，0)→(map_size_x,0)
-   ↓
- (0,map_size_y)
- 地图示意如上
 
-## 2.2 数据广播
-成功注册后，每间隔tick_interval_ms后，服务端会广播当前地图上所有元素的状态，客户端利用元素状态与地图构建完整游戏状态
-目前发送客户端所存储的完整坦克状态
+### type=4 错误提示
+
+
 ```json
-"payload": {
-    "tanks": [
-        {
-            "x": 1,      //坦克中心x坐标 uint
-            "y": 1,      //坦克中心y坐标 uint
-            "reload": 0, //坦克开火cd
-            "trigger": false, //坦克扳机 bool
-            "gunfacing": 2,   //炮管朝向 Dir***
-            "status": 1,      //坦克状态 byte 
-            "orientation": 5, //移动方向 Dir***
-            "id": "ae9f7384-02b5-4407-8bab-4203beffc13a" //链接对应坦克id
-        },
-        {
-            "x": 250,
-            "y": 1,
-            "reload": 0,
-            "trigger": false,
-            "gunfacing": 2,
-            "status": 1,
-            "orientation": 5,
-            "id": "1d35960b-0885-45ee-ae70-12cb3c5a75da"
-        }
-    ]
+{
+    "type": 4,
+    "id": "...",
+    "payload": {
+        "notice": "error message"
+    }
 }
 ```
-### 2.2.1 方向代码
-在描述方向时，如orientation gunfacing，会传递如下数据
-```go
-const (
-	DirUp        = 8
-	DirUpRight   = 9     //    up
-	DirRight     = 6     //    ↑ 
-	DirDownRight = 3     //  7 8 9
-	DirDown      = 2     //← 4 5 6 → right
-	DirDownLeft  = 1     //  1 2 3
-	DirLeft      = 4     //    ↓
-	DirUpLeft    = 7
-	DirNone      = 5
-) //8向方位代码
-```
-约定利用Dir***标识方向，2对应下、8对应上、4对应左、6对应右、5对应静止
-（也就是小键盘对应方向）
-炮管方向不存在5，设定为最后移动方向
-### 2.2.2 坦克状态
-```go
-const (
-	StatusFree  byte = 0
-	StatusTaken byte = 1
-) //坦克状态
-```
-# 3 客户端消息
-
-### 3.1 坦克操作指令
-客户端需要向所控制坦克发送移动等指令时，需要将payload构建如下
+| 字段名 | 说明            |类型|
+|---------|--------------|-|
+|notice|提示内容|string|
+---
+### type = 5 命中事件广播
 ```json
-"payload": {
-    "up":0, // bool
-    "down":1,
-    "left":0,
-    "right":0,
-    "action":"0"//string
+{
+    "type": 5,
+    "id": "broadcast message gamer",
+    "payload": {
+        "username": "qaq555",
+        "victim": "2222"
+    }
 }
 ```
-up,down,left,right 代表客户端是否按下对应按键，按下时持续传递1，抬起时持续传递0
-action 保留
+| 字段名 | 说明            |类型|
+|---------|--------------|-|
+|username|发起命中事件通知的username|string|
+|victim|被击中人的id|string|
+### type=15 坦克操作指令
+
+
+客户端向服务端发送坦克操作指令：
+
+
+```json
+{
+    "type": 15,
+    "id": "<客户端ID>",
+    "payload": {
+        "up": true,
+        "down": false,
+        "left": false,
+        "right": true,
+        "action": "fire"
+    }
+}
+```
+|字段名|说明|类型|
+|-----|-----|----|
+|up|上移动信号量|bool|
+|down|下移动信号量|bool|
+|left|左移信号量|bool|
+|right|右移信号量|bool|
+|action|坦克行动|string|
+
+
+action内容有
+
+|内容|说明|
+|---|----|
+|fire|向服务端发送开火请求|
 
 
 
+---
+
+
+### type=16 注册请求
+
+
+客户端向服务端发送注册请求：
+
+
+```json
+{
+    "type": 16,
+    "id": "",
+    "payload": {
+        "username": "888",
+        "success": true
+    }
+}
+```
+|字段名|说明|类型|
+|-----|-----|----|
+|username|注册用户名|string|
+|success|是否成功接收链接通知|bool|
+
+
+
+### type=17 命中通知
+
+
+客户端检测到自己子弹命中后，通知服务端
+```json
+{
+    "type": 17,
+    "id": "",
+    "payload": {
+        "shoter":"qaq555", 
+        "victim":"2222"
+    }
+}
+```
+|字段名|说明|类型|
+|-----|-----|----|
+|username|通知发起用户|string|
+|victim|受击用户|string|
 
 
