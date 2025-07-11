@@ -27,6 +27,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		Notice: "websocket connect success",
 	}
 	data, err := RePackWebMessageJson(0, notice, "perpartext")
+
 	if err != nil {
 		log.Println("Failed to marshal notice payload:", err)
 		return
@@ -49,7 +50,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 	if tank == nil {
 		log.Printf("❌ No available spawn point for %s\n", username)
 
-		data, err := RePackWebMessageJson(0, []byte("No available spawn point"), username)
+		data, err := RePackWebMessageJson(4, []byte("No available spawn point"), username)
 		if err != nil {
 			log.Println("Failed to marshal game state:", err)
 			return
@@ -57,6 +58,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 
 		conn.WriteMessage(websocket.TextMessage, data)
 		conn.Close()
+		removeUsername(username)
 		return
 	}
 
@@ -233,7 +235,7 @@ func UnpackWebMessage(data []byte) (byte, string, interface{}, error) {
 	if err != nil {
 		return 0, "", nil, err
 	}
-	log.Printf("%+v", mes)
+	//log.Printf("%+v", mes)
 	// 因为 Payload 是 interface{}，它现在是 map[string]interface{}
 	// 所以我们先把它再 Marshal 一次，得到原始 JSON
 	payloadBytes, err := json.Marshal(mes.Payload)
@@ -261,7 +263,7 @@ func UnpackWebMessage(data []byte) (byte, string, interface{}, error) {
 	default:
 		return 0, "", nil, fmt.Errorf("unknown message type: %d", mes.Type)
 	}
-	log.Printf("%+v", payload)
+	//log.Printf("%+v", payload)
 	return mes.Type, mes.ID, payload, nil
 }
 
@@ -372,7 +374,7 @@ func processMessage(conn *websocket.Conn, msg []byte) (bool, string, error) {
 		Notice: "username is empty or already exists",
 	}
 
-	data, err := RePackWebMessageJson(0, notice, rp.Username)
+	data, err := RePackWebMessageJson(4, notice, rp.Username)
 	if err != nil {
 		log.Println("Failed to marshal notice payload:", err)
 		return false, "", nil

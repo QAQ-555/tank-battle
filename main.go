@@ -1,6 +1,8 @@
 package main
 
 import (
+	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 
@@ -9,18 +11,29 @@ import (
 )
 
 func main() {
+	// 加载配置
+	if err := LoadConfig(); err != nil {
+		log.Fatalf("无法加载配置文件: %v", err)
+	}
+
 	log.SetFlags(log.Lmicroseconds)
 
 	webserver.InitSpawnTanks()
-	http.HandleFunc("/ws", webserver.Handler)
+	http.HandleFunc(AppConfig.WebSocketPath, webserver.Handler)
+	http.HandleFunc(AppConfig.MapWebSocketPath, gamemap.WsMapHandler)
 
-	//http.HandleFunc("/map", mapHandler)
-	http.HandleFunc("/mapws", gamemap.WsMapHandler)
+	// 添加配置API
+	http.HandleFunc("/config", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(AppConfig)
+	})
+
 	go webserver.MapRenderloop()
 	go webserver.BroadcastLoop()
 
-	log.Println("WebSocket server started on :8887")
-	if err := http.ListenAndServe("0.0.0.0:8887", nil); err != nil {
+	addr := fmt.Sprintf("0.0.0.0:%d", AppConfig.ServerPort)
+	log.Printf("WebSocket server started on %s", addr)
+	if err := http.ListenAndServe(addr, nil); err != nil {
 		log.Fatal("ListenAndServe: ", err)
 	}
 }
