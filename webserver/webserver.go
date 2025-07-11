@@ -13,99 +13,116 @@ import (
 )
 
 // 处理链接请求
+// 处理链接请求
 func Handler(w http.ResponseWriter, r *http.Request) {
-	//升级http
+	// 升级 HTTP 连接为 WebSocket
 	conn, err := model.UP.Upgrade(w, r, nil)
 	if err != nil {
 		log.Println("Upgrade error:", err)
 		return
 	}
-	//发送请求
 
+	// 向客户端发送连接成功通知
 	notice := model.NoticePayload{
 		Notice: "websocket connect success",
 	}
-
 	data, err := RePackWebMessageJson(0, notice, "perpartext")
 	if err != nil {
 		log.Println("Failed to marshal notice payload:", err)
 		return
 	}
 	conn.WriteMessage(websocket.TextMessage, data)
-	//倒计时请求username
 
-	var username string // 记录分配的 username
-
+	// 等待客户端提交用户名
+	var username string
 	ok, username := WaitForCondition(conn)
 	if ok {
-		log.Println("成功获取 username:", username)
+		log.Println("✅ 成功获取 username:", username)
 	} else {
-		log.Println("⏳ 超时或失败，条件未达成")
-		conn.Close() // 关闭连接，确保释放资源
+		log.Println("⏳ 超时或失败，未获取 username")
+		conn.Close() // 关闭连接，释放资源
 		return
 	}
-	//后续逻辑...
+
+	// 为客户端分配坦克
 	tank := allocateTank()
 	if tank == nil {
-		log.Printf("No available spawn point for %s\n", username)
+		log.Printf("❌ No available spawn point for %s\n", username)
+
 		data, err := RePackWebMessageJson(0, []byte("No available spawn point"), username)
 		if err != nil {
 			log.Println("Failed to marshal game state:", err)
 			return
 		}
+
 		conn.WriteMessage(websocket.TextMessage, data)
 		conn.Close()
 		return
 	}
 
+	// 注册客户端
 	client := &model.Client{
 		ID:         username,
 		Conn:       conn,
 		Tank:       tank,
 		LastActive: time.Now(),
 	}
-	client.Tank.ID = client.ID //每个链接占用一个坦克
+	client.Tank.ID = client.ID // 每个连接占用一个坦克
+
 	model.ClientsMu.Lock()
 	model.Clients[username] = client
 	model.ClientsMu.Unlock()
+
+	// 发送地图配置信息
 	SendConfig(conn, client.ID, tank)
-	log.Printf("New connection: %s at (%d,%d) facing %d\n",
+
+	log.Printf("🎮 New connection: %s at (%d,%d) facing %d\n",
 		username, tank.LocalX, tank.LocalY, tank.Orientation)
+
 	printTankShape(tank)
+
+	// 启动客户端消息读取 goroutine
 	go readMessages(client)
 }
 
 // 处理客户端指令
 func readMessages(client *model.Client) {
+	// 断开连接后释放资源
 	defer func() {
 		client.Conn.Close()
+
 		model.ClientsMu.Lock()
 		delete(model.Clients, client.ID)
 		model.ClientsMu.Unlock()
+
 		removeUsername(client.ID)
+
 		if client.Tank != nil {
 			FreeTank(client.Tank)
-			log.Printf("Freed spawn for %s\n", client.ID)
+			log.Printf("✅ Freed spawn for %s\n", client.ID)
 		}
 
-		log.Printf("Connection %s closed\n", client.ID)
+		log.Printf("🔌 Connection %s closed\n", client.ID)
 	}()
 
 	for {
+		// 读取客户端消息
 		_, msg, err := client.Conn.ReadMessage()
-		fmt.Printf("**********************************************")
 		if err != nil {
-			log.Printf("Connection %s error: %v\n", client.ID, err)
+			log.Printf("⚠️ Connection %s error: %v\n", client.ID, err)
 			break
 		}
 
+		// 解析客户端发送的 JSON 消息
 		_, _, payload, err := UnpackWebMessage(msg)
 		if err != nil {
-			log.Printf("Failed to parse JSON from %s: %v", client.ID, err)
+			log.Printf("❌ Failed to parse JSON from %s: %v", client.ID, err)
 			continue
 		}
-		if op, ok := payload.(model.OperatePayload); ok {
 
+		// 判断 payload 类型
+		if op, ok := payload.(model.OperatePayload); ok {
+			// 更新方向
 			moveDir := parseDirection(op.Up, op.Down, op.Left, op.Right)
 
 			client.LastActive = time.Now()
@@ -115,21 +132,32 @@ func readMessages(client *model.Client) {
 				client.Tank.GunFacing = moveDir
 			}
 
-			log.Printf("tank %s try move to %d", client.ID, client.Tank.Orientation)
-			if op.Action == "fire" && client.Tank.Reload == 0 { //接收到开火命令且已经装填完毕后将扳机置于开
-				log.Printf("tank %s try fire and already Reload", client.ID)
+			// 检查是否开火
+			if op.Action == "fire" && client.Tank.Reload == 0 {
+				log.Printf("🔥 tank %s fires (reload OK)", client.ID)
+
 				se := OpenFire(client.Tank)
+
 				data, err := RePackWebMessageJson(3, se, "broadcast message gamer")
 				if err != nil {
 					log.Println("Failed to marshal game state:", err)
 					return
 				}
-				client.Conn.WriteMessage(websocket.TextMessage, data)
 
+				// 广播开火消息
+				model.ClientsMu.Lock()
+				for _, c := range model.Clients {
+					if err := c.Conn.WriteMessage(websocket.TextMessage, data); err != nil {
+						log.Printf("Error sending to %s: %v\n", c.ID, err)
+					}
+				}
+				model.ClientsMu.Unlock()
 			}
+
 			printTankShape(client.Tank)
+
 		} else {
-			log.Printf("payload 不是 OperatePayload，而是：%T", payload)
+			log.Printf("⚠️ payload 不是 OperatePayload，而是：%T", payload)
 		}
 	}
 }
@@ -141,7 +169,6 @@ func BroadcastLoop() {
 
 	for range ticker.C {
 		BroadcastGameState()
-		<-model.FlagChan
 	}
 }
 

@@ -20,7 +20,7 @@ func main() {
 	go webserver.BroadcastLoop()
 
 	log.Println("WebSocket server started on :8888")
-	if err := http.ListenAndServe("0.0.0.0:8881", nil); err != nil {
+	if err := http.ListenAndServe("0.0.0.0:8887", nil); err != nil {
 		log.Fatal("ListenAndServe: ", err)
 	}
 }

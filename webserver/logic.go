@@ -42,7 +42,6 @@ func MapRenderloop() {
 		// }
 		model.SpawnTanksMu.Unlock()
 		model.ShotEventsMu.Unlock()
-		model.FlagChan <- true
 	}
 
 }
@@ -282,7 +281,7 @@ func allocateTank() *model.Tank {
 func FreeTank(target *model.Tank) {
 	model.SpawnTanksMu.Lock()
 	defer model.SpawnTanksMu.Unlock()
-
+	gamemap.MarkTankOnMap(target, 0)
 	for i, t := range model.SpawnTanks {
 		if t == target {
 			// 用最后一个覆盖自己

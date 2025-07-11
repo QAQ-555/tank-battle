@@ -6,7 +6,7 @@ class NetworkManager {
         this.gameCore = gameCore;
         this.ws = null;
         this.isConnected = false;
-        this.serverUrl = 'ws://localhost:8881/ws';
+        this.serverUrl = 'ws://192.168.10.233:8887/ws';
     }
 
     /**
