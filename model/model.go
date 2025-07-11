@@ -75,9 +75,8 @@ type MapConfig struct {
 
 // 坦克状态
 type Tank struct {
-	LocalX uint `json:"x"`
-	LocalY uint `json:"y"`
-	//Theta       float64 `json:theta`
+	LocalX      uint   `json:"x"`
+	LocalY      uint   `json:"y"`
 	Reload      uint   `json:"reload"`
 	Trigger     bool   `json:"trigger"`
 	GunFacing   byte   `json:"gunfacing"`
@@ -95,7 +94,7 @@ type GameState struct {
 
 }
 
-// 子弹状态
+// 发射活动
 type ShotEvent struct {
 	Tank   string `json:"shoter"`
 	LocalX uint   `json:"x"`
