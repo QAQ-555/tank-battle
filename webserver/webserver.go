@@ -13,87 +13,95 @@ import (
 )
 
 // 处理链接请求
-// 处理链接请求
 func Handler(w http.ResponseWriter, r *http.Request) {
-	// 升级 HTTP 连接为 WebSocket
+	// 1. 升级 HTTP 连接为 WebSocket
 	conn, err := model.UP.Upgrade(w, r, nil)
 	if err != nil {
 		log.Println("Upgrade error:", err)
 		return
 	}
 
-	// 注册客户端
+	// 2. 创建客户端实例
 	client := &model.Client{
 		Conn:       conn,
 		LastActive: time.Now(),
 	}
 
-	// 向客户端发送连接成功通知
-	notice := model.NoticePayload{
-		Notice: "websocket connect success",
-	}
-	data, err := RePackWebMessageJson(0, notice, "perpartext")
-
-	if err != nil {
+	// 3. 发送连接成功通知
+	if err := sendConnectNotice(client); err != nil {
 		log.Println("Failed to marshal notice payload:", err)
 		return
 	}
-	log.Printf("lock 1")
-	client.WriteMutex.Lock()
-	conn.WriteMessage(websocket.TextMessage, data)
-	client.WriteMutex.Unlock()
-	log.Printf("unlock 1")
 
-	// 等待客户端提交用户名
-	var username string
-	ok, username := WaitForCondition(client)
-	if ok {
-		log.Println("✅ 成功获取 username:", username)
-	} else {
+	// 4. 等待客户端提交用户名
+	ok, username := waitForUsername(client)
+	if !ok {
 		log.Println("⏳ 超时或失败，未获取 username")
 		conn.Close() // 关闭连接，释放资源
 		return
 	}
+	log.Println("✅ 成功获取 username:", username)
 	client.ID = username
-	// 为客户端分配坦克
-	tank := allocateTank()
+
+	// 5. 为客户端分配坦克
+	tank := allocateTank(username)
 	if tank == nil {
 		log.Printf("❌ No available spawn point for %s\n", username)
-
-		data, err := RePackWebMessageJson(4, []byte("No available spawn point"), username)
-		if err != nil {
-			log.Println("Failed to marshal game state:", err)
-			return
-		}
-		log.Printf("lock 2")
-		client.WriteMutex.Lock()
-		conn.WriteMessage(websocket.TextMessage, data)
-		client.WriteMutex.Unlock()
-		log.Printf("unlock 2")
+		sendNoSpawnNotice(client, username)
 		conn.Close()
 		removeUsername(username)
 		return
 	}
-	tank.ID = username
+
+	// 6. 添加客户端到全局列表
 	model.ClientsMu.Lock()
 	model.Clients[username] = client
 	model.ClientsMu.Unlock()
 	client.Tank = tank
-	// 发送地图配置信息
+
+	// 7. 发送配置信息
 	SendConfig(client)
 
 	log.Printf("🎮 New connection: %s at (%d,%d) facing %d\n",
 		username, tank.LocalX, tank.LocalY, tank.Orientation)
 
-	//printTankShape(tank)
-
-	// 启动客户端消息读取 goroutine
-	go readMessages(client)
+	// 8. 启动消息读取 goroutine
+	go handleClientMessages(client)
 }
 
-// 处理客户端指令
-func readMessages(client *model.Client) {
-	// 断开连接后释放资源
+// 发送连接成功通知
+func sendConnectNotice(client *model.Client) error {
+	notice := model.NoticePayload{
+		Notice: "websocket connect success",
+	}
+	data, err := RePackWebMessageJson(0, notice, "perpartext")
+	if err != nil {
+		return err
+	}
+	log.Printf("lock 1")
+	client.WriteMutex.Lock()
+	defer client.WriteMutex.Unlock()
+	err = client.Conn.WriteMessage(websocket.TextMessage, data)
+	log.Printf("unlock 1")
+	return err
+}
+
+// 发送无可用出生点通知
+func sendNoSpawnNotice(client *model.Client, username string) {
+	data, err := RePackWebMessageJson(4, []byte("No available spawn point"), username)
+	if err != nil {
+		log.Println("Failed to marshal game state:", err)
+		return
+	}
+	log.Printf("lock 2")
+	client.WriteMutex.Lock()
+	client.Conn.WriteMessage(websocket.TextMessage, data)
+	client.WriteMutex.Unlock()
+	log.Printf("unlock 2")
+}
+
+// 处理客户端消息循环
+func handleClientMessages(client *model.Client) {
 	defer func() {
 		log.Printf("free resource")
 		client.Conn.Close()
@@ -127,66 +135,74 @@ func readMessages(client *model.Client) {
 			continue
 		}
 
-		// 判断 payload 类型
-		if op, ok := payload.(model.OperatePayload); ok {
-			// 更新方向
-			moveDir := parseDirection(op.Up, op.Down, op.Left, op.Right)
+		switch v := payload.(type) {
+		case model.OperatePayload:
+			processOperatePayload(client, v)
+		case model.HitPayload:
+			processHitPayload(v)
+		default:
+			log.Printf("⚠️ payload 不是 OperatePayload/HitPayload，而是：%T", payload)
+		}
+	}
+}
 
-			client.LastActive = time.Now()
-			client.Tank.Orientation = moveDir
+// 处理坦克操作指令
+func processOperatePayload(client *model.Client, op model.OperatePayload) {
+	moveDir := parseDirection(op.Up, op.Down, op.Left, op.Right)
+	client.LastActive = time.Now()
+	client.Tank.Orientation = moveDir
 
-			if moveDir != model.DirNone {
-				client.Tank.GunFacing = moveDir
-			}
+	if moveDir != model.DirNone {
+		client.Tank.GunFacing = moveDir
+	}
 
-			// 检查是否开火
-			if op.Action == "fire" && client.Tank.Reload == 0 {
-				log.Printf("🔥 tank %s fires (reload OK)", client.ID)
+	// 检查是否开火
+	if op.Action == "fire" && client.Tank.Reload == 0 {
+		log.Printf("🔥 tank %s fires (reload OK)", client.ID)
+		se := OpenFire(client.Tank)
+		data, err := RePackWebMessageJson(3, se, "broadcast message gamer")
+		if err != nil {
+			log.Println("Failed to marshal game state:", err)
+			return
+		}
+		broadcastToAllClients(data, "Broadcast fire")
+	}
+}
 
-				se := OpenFire(client.Tank)
+// 处理命中事件
+func processHitPayload(oh model.HitPayload) {
+	data, err := RePackWebMessageJson(7, oh, "broadcast message gamer")
+	if err != nil {
+		log.Println("Failed to marshal game state:", err)
+		return
+	}
+	log.Println("HitPayload")
+	// 这里可根据业务逻辑判断消息有效性
+	model.ClientsMu.Lock()
+	defer model.ClientsMu.Unlock()
+	for _, c := range model.Clients {
+		if err := c.Conn.WriteMessage(websocket.TextMessage, data); err != nil {
+			log.Printf("Error sending to %s: %v\n", c.ID, err)
+		}
+		if c.Tank.ID == oh.Victim {
+			FreeTank(c.Tank)
+			c.Tank = allocateTank(oh.Victim)
+		}
+	}
+}
 
-				data, err := RePackWebMessageJson(3, se, "broadcast message gamer")
-				if err != nil {
-					log.Println("Failed to marshal game state:", err)
-					return
-				}
-
-				// 广播开火消息
-				// 修改开火指令广播中的写入逻辑
-				model.ClientsMu.Lock()
-				for _, c := range model.Clients {
-					log.Printf("lock 3")
-					c.WriteMutex.Lock() // 加锁
-					err := c.Conn.WriteMessage(websocket.TextMessage, data)
-					c.WriteMutex.Unlock()
-					log.Printf("unlock 3") // 解锁
-					if err != nil {
-						log.Printf("Broadcast fire Error sending to %s: %v\n", c.ID, err)
-					}
-				}
-				model.ClientsMu.Unlock()
-			}
-
-		} else if oh, ok := payload.(model.HitPayload); ok {
-			data, err := RePackWebMessageJson(7, oh, "broadcast message gamer")
-			if err != nil {
-				log.Println("Failed to marshal game state:", err)
-				return
-			}
-			log.Println("HitPayload")
-			model.ClientsMu.Lock()
-			for _, c := range model.Clients {
-				if err := c.Conn.WriteMessage(websocket.TextMessage, data); err != nil {
-					log.Printf("Error sending to %s: %v\n", c.ID, err)
-				}
-				if c.Tank.ID == oh.Victim {
-					FreeTank(c.Tank)
-					c.Tank = allocateTank()
-				}
-			}
-			model.ClientsMu.Unlock()
-		} else {
-			log.Printf("⚠️ payload 不是 OperatePayload，而是：%T", payload)
+// 广播消息到所有客户端
+func broadcastToAllClients(data []byte, logPrefix string) {
+	model.ClientsMu.Lock()
+	defer model.ClientsMu.Unlock()
+	for _, c := range model.Clients {
+		log.Printf("lock 3")
+		c.WriteMutex.Lock()
+		err := c.Conn.WriteMessage(websocket.TextMessage, data)
+		c.WriteMutex.Unlock()
+		log.Printf("unlock 3")
+		if err != nil {
+			log.Printf("%s Error sending to %s: %v\n", logPrefix, c.ID, err)
 		}
 	}
 }
@@ -310,9 +326,8 @@ func UnpackWebMessage(data []byte) (byte, string, interface{}, error) {
 	return mes.Type, mes.ID, payload, nil
 }
 
-func WaitForCondition(c *model.Client) (bool, string) {
-	// log.Println("[WaitForCondition] 开始")
-
+// 等待客户端注册用户名
+func waitForUsername(c *model.Client) (bool, string) {
 	c.Conn.SetReadDeadline(time.Now().Add(model.WAIT_REPLY_TIME * time.Second))
 	msgCh := make(chan []byte)
 	timeoutCh := make(chan bool)
@@ -373,7 +388,7 @@ func WaitForCondition(c *model.Client) (bool, string) {
 
 		case msg := <-msgCh:
 			// log.Println("[WaitForCondition] 从 msgCh 收到:", string(msg))
-			readNext, username, err := processMessage(c, msg)
+			readNext, username, err := handleRegisterMessage(c, msg)
 			// log.Println("[WaitForCondition] processMessage 返回:", readNext, username, err)
 
 			// log.Println("[WaitForCondition] 尝试写入 closeCh:", readNext)
@@ -393,8 +408,8 @@ func WaitForCondition(c *model.Client) (bool, string) {
 	}
 }
 
-// 处理信息
-func processMessage(c *model.Client, msg []byte) (bool, string, error) {
+// 处理注册消息
+func handleRegisterMessage(c *model.Client, msg []byte) (bool, string, error) {
 	_, _, payload, err := UnpackWebMessage(msg)
 	if err != nil {
 		return false, "", fmt.Errorf("failed to parse message: %w", err)

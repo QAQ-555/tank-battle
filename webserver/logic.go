@@ -224,7 +224,7 @@ func InitSpawnTanks() {
 }
 
 // 分配出生点
-func allocateTank() *model.Tank {
+func allocateTank(id string) *model.Tank {
 	model.SpawnTanksMu.Lock()
 	defer model.SpawnTanksMu.Unlock()
 	for {
@@ -239,6 +239,7 @@ func allocateTank() *model.Tank {
 				GunFacing:   model.DirDown,
 				Status:      model.StatusTaken,
 				Orientation: model.DirNone,
+				ID:          id,
 			}
 			model.SpawnTanks = append(model.SpawnTanks, &t)
 			gamemap.MarkTankOnMap(&t, 1)
