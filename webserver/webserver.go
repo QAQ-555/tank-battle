@@ -407,6 +407,6 @@ func processMessage(c *model.Client, msg []byte) (bool, string, error) {
 	c.WriteMutex.Lock()
 	c.Conn.WriteMessage(websocket.TextMessage, data)
 	c.WriteMutex.Unlock()
-	log.Printf("unlock 6")
+	log.Printf("lock 6")
 	return false, "", nil
 }
