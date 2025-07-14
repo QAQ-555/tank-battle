@@ -51,7 +51,7 @@ function getRandomDirections() {
 for (let i = 1; i <= 20; i++) {
   const mapElem = createMapContainer(i);
 
-  const ws = new WebSocket("ws://192.168.10.233:8887/ws");
+  const ws = new WebSocket("ws://192.168.10.94:8888/ws");
 
   ws.onopen = function () {
     console.log(`WS ${i} opened`);

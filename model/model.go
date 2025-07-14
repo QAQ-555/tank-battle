@@ -13,8 +13,8 @@ var FlagChan = make(chan bool)
 const (
 	MAP_SIZE_X          uint = 1542
 	MAP_SIZE_Y          uint = 512
-	TICK_INTERVAL_MS         = 50
-	MAP_RENDER_MS            = 50
+	TICK_INTERVAL_MS         = 1000
+	MAP_RENDER_MS            = 1000
 	WAIT_REPLY_TIME          = 60
 	TANK_RELOAD_SECONDS      = 3
 ) //建立链接发送数据
@@ -111,6 +111,7 @@ type Client struct {
 	Conn       *websocket.Conn
 	Tank       *Tank
 	LastActive time.Time
+	WriteMutex sync.Mutex // 添加写互斥锁
 }
 
 // 客户端请求

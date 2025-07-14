@@ -22,6 +22,12 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// 注册客户端
+	client := &model.Client{
+		Conn:       conn,
+		LastActive: time.Now(),
+	}
+
 	// 向客户端发送连接成功通知
 	notice := model.NoticePayload{
 		Notice: "websocket connect success",
@@ -32,11 +38,15 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		log.Println("Failed to marshal notice payload:", err)
 		return
 	}
+	log.Printf("lock 1")
+	client.WriteMutex.Lock()
 	conn.WriteMessage(websocket.TextMessage, data)
+	client.WriteMutex.Unlock()
+	log.Printf("unlock 1")
 
 	// 等待客户端提交用户名
 	var username string
-	ok, username := WaitForCondition(conn)
+	ok, username := WaitForCondition(client)
 	if ok {
 		log.Println("✅ 成功获取 username:", username)
 	} else {
@@ -44,7 +54,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		conn.Close() // 关闭连接，释放资源
 		return
 	}
-
+	client.ID = username
 	// 为客户端分配坦克
 	tank := allocateTank()
 	if tank == nil {
@@ -55,28 +65,22 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			log.Println("Failed to marshal game state:", err)
 			return
 		}
-
+		log.Printf("lock 2")
+		client.WriteMutex.Lock()
 		conn.WriteMessage(websocket.TextMessage, data)
+		client.WriteMutex.Unlock()
+		log.Printf("unlock 2")
 		conn.Close()
 		removeUsername(username)
 		return
 	}
 
-	// 注册客户端
-	client := &model.Client{
-		ID:         username,
-		Conn:       conn,
-		Tank:       tank,
-		LastActive: time.Now(),
-	}
-	client.Tank.ID = client.ID // 每个连接占用一个坦克
-
 	model.ClientsMu.Lock()
 	model.Clients[username] = client
 	model.ClientsMu.Unlock()
-
+	client.Tank = tank
 	// 发送地图配置信息
-	SendConfig(conn, client.ID, tank)
+	SendConfig(client)
 
 	log.Printf("🎮 New connection: %s at (%d,%d) facing %d\n",
 		username, tank.LocalX, tank.LocalY, tank.Orientation)
@@ -91,6 +95,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 func readMessages(client *model.Client) {
 	// 断开连接后释放资源
 	defer func() {
+		log.Printf("free resource")
 		client.Conn.Close()
 
 		model.ClientsMu.Lock()
@@ -147,10 +152,16 @@ func readMessages(client *model.Client) {
 				}
 
 				// 广播开火消息
+				// 修改开火指令广播中的写入逻辑
 				model.ClientsMu.Lock()
 				for _, c := range model.Clients {
-					if err := c.Conn.WriteMessage(websocket.TextMessage, data); err != nil {
-						log.Printf("Error sending to %s: %v\n", c.ID, err)
+					log.Printf("lock 3")
+					c.WriteMutex.Lock() // 加锁
+					err := c.Conn.WriteMessage(websocket.TextMessage, data)
+					c.WriteMutex.Unlock()
+					log.Printf("unlock 3") // 解锁
+					if err != nil {
+						log.Printf("Broadcast fire Error sending to %s: %v\n", c.ID, err)
 					}
 				}
 				model.ClientsMu.Unlock()
@@ -187,15 +198,21 @@ func BroadcastGameState() {
 	}
 	model.ClientsMu.Lock()
 	defer model.ClientsMu.Unlock()
+	log.Println(model.Clients)
 	for _, c := range model.Clients {
-		if err := c.Conn.WriteMessage(websocket.TextMessage, data); err != nil {
-			log.Printf("Error sending to %s: %v\n", c.ID, err)
+		log.Printf("lock 4")
+		c.WriteMutex.Lock() // 加锁
+		err := c.Conn.WriteMessage(websocket.TextMessage, data)
+		c.WriteMutex.Unlock() // 解锁
+		log.Printf("unlock 4")
+		if err != nil {
+			log.Printf("Broadcast map Error sending to %s: %v\n", c.ID, err)
 		}
 	}
 }
 
 // 链接建立时 发送所需数据
-func SendConfig(conn *websocket.Conn, id string, t *model.Tank) {
+func SendConfig(c *model.Client) {
 
 	config := model.MapConfig{
 		Map:          gamemap.GetMap(),
@@ -203,17 +220,21 @@ func SendConfig(conn *websocket.Conn, id string, t *model.Tank) {
 		MapSizeY:     model.MAP_SIZE_Y,
 		TickInterval: model.TICK_INTERVAL_MS,
 		MapRenderMS:  model.MAP_RENDER_MS,
-		TankCoordX:   t.LocalX,
-		TankCoordY:   t.LocalY,
-		Tankfacing:   t.GunFacing,
-		ServerID:     id,
+		TankCoordX:   c.Tank.LocalX,
+		TankCoordY:   c.Tank.LocalY,
+		Tankfacing:   c.Tank.GunFacing,
+		ServerID:     c.ID,
 	}
-	data, err := RePackWebMessageJson(1, config, id)
+	data, err := RePackWebMessageJson(1, config, c.ID)
 	if err != nil {
 		log.Println("Failed to marshal game state:", err)
 		return
 	}
-	err = conn.WriteMessage(websocket.TextMessage, data)
+	log.Printf("lock 5")
+	c.WriteMutex.Lock()
+	err = c.Conn.WriteMessage(websocket.TextMessage, data)
+	c.WriteMutex.Unlock()
+	log.Printf("unlock 5")
 	if err != nil {
 		log.Println("write message error:", err)
 		return
@@ -270,10 +291,10 @@ func UnpackWebMessage(data []byte) (byte, string, interface{}, error) {
 	return mes.Type, mes.ID, payload, nil
 }
 
-func WaitForCondition(conn *websocket.Conn) (bool, string) {
+func WaitForCondition(c *model.Client) (bool, string) {
 	// log.Println("[WaitForCondition] 开始")
 
-	conn.SetReadDeadline(time.Now().Add(model.WAIT_REPLY_TIME * time.Second))
+	c.Conn.SetReadDeadline(time.Now().Add(model.WAIT_REPLY_TIME * time.Second))
 	msgCh := make(chan []byte)
 	timeoutCh := make(chan bool)
 	closeCh := make(chan bool)
@@ -285,7 +306,7 @@ func WaitForCondition(conn *websocket.Conn) (bool, string) {
 
 		for {
 			// log.Println("[goroutine] 开始 ReadMessage")
-			_, msg, err := conn.ReadMessage()
+			_, msg, err := c.Conn.ReadMessage()
 			if err != nil {
 				// log.Println("[goroutine] ReadMessage 出错:", err)
 
@@ -317,7 +338,7 @@ func WaitForCondition(conn *websocket.Conn) (bool, string) {
 
 	defer func() {
 		// log.Println("[WaitForCondition] defer: 关闭 closeCh")
-		conn.SetReadDeadline(time.Time{})
+		c.Conn.SetReadDeadline(time.Time{})
 		close(closeCh)
 	}()
 
@@ -333,7 +354,7 @@ func WaitForCondition(conn *websocket.Conn) (bool, string) {
 
 		case msg := <-msgCh:
 			// log.Println("[WaitForCondition] 从 msgCh 收到:", string(msg))
-			readNext, username, err := processMessage(conn, msg)
+			readNext, username, err := processMessage(c, msg)
 			// log.Println("[WaitForCondition] processMessage 返回:", readNext, username, err)
 
 			// log.Println("[WaitForCondition] 尝试写入 closeCh:", readNext)
@@ -354,7 +375,7 @@ func WaitForCondition(conn *websocket.Conn) (bool, string) {
 }
 
 // 处理信息
-func processMessage(conn *websocket.Conn, msg []byte) (bool, string, error) {
+func processMessage(c *model.Client, msg []byte) (bool, string, error) {
 	_, _, payload, err := UnpackWebMessage(msg)
 	if err != nil {
 		return false, "", fmt.Errorf("failed to parse message: %w", err)
@@ -382,7 +403,10 @@ func processMessage(conn *websocket.Conn, msg []byte) (bool, string, error) {
 		log.Println("Failed to marshal notice payload:", err)
 		return false, "", nil
 	}
-	conn.WriteMessage(websocket.TextMessage, data)
-
+	log.Printf("lock 6")
+	c.WriteMutex.Lock()
+	c.Conn.WriteMessage(websocket.TextMessage, data)
+	c.WriteMutex.Unlock()
+	log.Printf("unlock 6")
 	return false, "", nil
 }
