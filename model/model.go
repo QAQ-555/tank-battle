@@ -13,8 +13,8 @@ var FlagChan = make(chan bool)
 const (
 	MAP_SIZE_X          uint = 1542
 	MAP_SIZE_Y          uint = 512
-	TICK_INTERVAL_MS         = 1000
-	MAP_RENDER_MS            = 1000
+	TICK_INTERVAL_MS         = 50
+	MAP_RENDER_MS            = 50
 	WAIT_REPLY_TIME          = 60
 	TANK_RELOAD_SECONDS      = 3
 ) //建立链接发送数据
@@ -99,7 +99,7 @@ type GameState struct {
 
 // 发射活动
 type ShotEvent struct {
-	Tank   string `json:"shoter"`
+	Tank   string `json:"username"`
 	LocalX uint   `json:"x"`
 	LocalY uint   `json:"y"`
 	Facing byte   `json:"orientation"`
@@ -124,11 +124,8 @@ type OperatePayload struct {
 }
 
 type HitPayload struct {
-	Up     bool
-	Down   bool
-	Left   bool
-	Right  bool
-	Action string
+	Username string `json:"username"`
+	Victim   string `json:"victim"`
 }
 
 type RequestPayload struct {

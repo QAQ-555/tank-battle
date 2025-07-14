@@ -169,9 +169,37 @@ func readMessages(client *model.Client) {
 
 			//printTankShape(client.Tank)
 
-		} else if oc, ok := payload.(model.OperatePayload); ok {
-			log.Println(oc)
-			log.Printf("⚠️ payload 不是 OperatePayload，而是：%T", payload)
+		} else if oh, ok := payload.(model.HitPayload); ok {
+			data, err := RePackWebMessageJson(5, oh, "broadcast message gamer")
+			if err != nil {
+				log.Println("Failed to marshal game state:", err)
+				return
+			}
+			log.Println("HitPayload")
+			model.ClientsMu.Lock()
+			for _, c := range model.Clients {
+				if err := c.Conn.WriteMessage(websocket.TextMessage, data); err != nil {
+					log.Printf("Error sending to %s: %v\n", c.ID, err)
+				}
+			}
+			model.ClientsMu.Unlock()
+
+			for _, t := range model.SpawnTanks {
+				if t.ID == oh.Victim {
+					FreeTank(t)
+					removeUsername(t.ID)
+					// notice := model.NoticePayload{
+					// 	Notice: "you failed",
+					// }
+					// data, err := RePackWebMessageJson(6, notice, t.ID)
+					// if err != nil {
+					// 	log.Println("Failed to marshal notice payload:", err)
+					// 	return
+					// }
+					// client.Conn.WriteMessage(websocket.TextMessage, data)
+					return
+				}
+			}
 		} else {
 			log.Printf("⚠️ payload 不是 OperatePayload，而是：%T", payload)
 		}
