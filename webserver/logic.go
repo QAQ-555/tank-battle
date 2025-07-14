@@ -22,28 +22,24 @@ func MapRenderloop() {
 		// num := runtime.NumGoroutine()
 		// fmt.Printf("当前 goroutine 数量：%d\n", num)
 		model.SpawnTanksMu.Lock()
-		model.ShotEventsMu.Lock()
-		model.ShotEvents = model.ShotEvents[0:0]
+		// model.ShotEventsMu.Lock()
+		// model.ShotEvents = model.ShotEvents[0:0]
 		for _, t := range model.SpawnTanks {
 			//坦克移动
 			if t.Status == model.StatusTaken {
 				gamemap.MarkTankOnMap(t, 0)
 				moveTank(t)
-				if t.Trigger { //更新坦克状态时，如果坦克扳机按下则发射子弹
-					model.ShotEvents = append(model.ShotEvents, OpenFire(t))
-				}
+				// if t.Trigger { //更新坦克状态时，如果坦克扳机按下则发射子弹
+				// 	model.ShotEvents = append(model.ShotEvents, OpenFire(t))
+				// }
 				gamemap.MarkTankOnMap(t, 1)
 			}
 			if t.Reload != 0 {
 				t.Reload -= 5
 			}
-			//发射子弹
 		}
-		// for _, b := range activeBullets {
-
-		// }
 		model.SpawnTanksMu.Unlock()
-		model.ShotEventsMu.Unlock()
+		// model.ShotEventsMu.Unlock()
 	}
 
 }

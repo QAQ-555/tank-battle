@@ -74,7 +74,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		removeUsername(username)
 		return
 	}
-
+	tank.ID = username
 	model.ClientsMu.Lock()
 	model.Clients[username] = client
 	model.ClientsMu.Unlock()
@@ -167,10 +167,8 @@ func readMessages(client *model.Client) {
 				model.ClientsMu.Unlock()
 			}
 
-			//printTankShape(client.Tank)
-
 		} else if oh, ok := payload.(model.HitPayload); ok {
-			data, err := RePackWebMessageJson(5, oh, "broadcast message gamer")
+			data, err := RePackWebMessageJson(7, oh, "broadcast message gamer")
 			if err != nil {
 				log.Println("Failed to marshal game state:", err)
 				return
@@ -181,25 +179,12 @@ func readMessages(client *model.Client) {
 				if err := c.Conn.WriteMessage(websocket.TextMessage, data); err != nil {
 					log.Printf("Error sending to %s: %v\n", c.ID, err)
 				}
-			}
-			model.ClientsMu.Unlock()
-
-			for _, t := range model.SpawnTanks {
-				if t.ID == oh.Victim {
-					FreeTank(t)
-					removeUsername(t.ID)
-					// notice := model.NoticePayload{
-					// 	Notice: "you failed",
-					// }
-					// data, err := RePackWebMessageJson(6, notice, t.ID)
-					// if err != nil {
-					// 	log.Println("Failed to marshal notice payload:", err)
-					// 	return
-					// }
-					// client.Conn.WriteMessage(websocket.TextMessage, data)
-					return
+				if c.Tank.ID == oh.Victim {
+					FreeTank(c.Tank)
+					c.Tank = allocateTank()
 				}
 			}
+			model.ClientsMu.Unlock()
 		} else {
 			log.Printf("⚠️ payload 不是 OperatePayload，而是：%T", payload)
 		}
@@ -312,6 +297,12 @@ func UnpackWebMessage(data []byte) (byte, string, interface{}, error) {
 			return 0, "", nil, err
 		}
 		payload = tp
+	case 17:
+		var hp model.HitPayload
+		if err := json.Unmarshal(payloadBytes, &hp); err != nil {
+			return 0, "", nil, err
+		}
+		payload = hp
 	default:
 		return 0, "", nil, fmt.Errorf("unknown message type: %d", mes.Type)
 	}

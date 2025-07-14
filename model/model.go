@@ -13,8 +13,8 @@ var FlagChan = make(chan bool)
 const (
 	MAP_SIZE_X          uint = 1542
 	MAP_SIZE_Y          uint = 512
-	TICK_INTERVAL_MS         = 50
-	MAP_RENDER_MS            = 50
+	TICK_INTERVAL_MS         = 1000
+	MAP_RENDER_MS            = 1000
 	WAIT_REPLY_TIME          = 60
 	TANK_RELOAD_SECONDS      = 3
 ) //建立链接发送数据
@@ -45,14 +45,16 @@ var UP = websocket.Upgrader{
 } //websocket设置
 
 var (
-	Clients      = make(map[string]*Client)
-	ClientsMu    sync.Mutex
-	SpawnTanks   []*Tank
-	SpawnTanksMu sync.Mutex
-	ShotEvents   []*ShotEvent
-	ShotEventsMu sync.Mutex
-	Usernames    []string
-	UsernameMu   sync.Mutex
+	Clients       = make(map[string]*Client)
+	ClientsMu     sync.Mutex
+	SpawnTanks    []*Tank
+	SpawnTanksMu  sync.Mutex
+	ShotEvents    []*ShotEvent
+	ShotEventsMu  sync.Mutex
+	Shotedtanks   []*Tank
+	ShotedtanksMu sync.Mutex
+	Usernames     []string
+	UsernameMu    sync.Mutex
 )
 
 // 通信壳
