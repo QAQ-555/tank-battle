@@ -10,6 +10,13 @@ import (
 	"example.com/lite_demo/model"
 )
 
+const (
+	ColorReset = "\033[0m"
+	ColorRed   = "\033[38;2;255;0;0m"
+	ColorGreen = "\033[38;2;0;255;0m"
+	ColorBlue  = "\033[38;2;0;0;255m"
+)
+
 var TANK_RELOAD_VALUE = model.TANK_RELOAD_SECONDS * 1000 / model.MAP_RENDER_MS * 5
 
 // 更新游戏状态
@@ -53,8 +60,8 @@ func OpenFire(t *model.Tank) *model.ShotEvent {
 	shotevent.LocalY = t.LocalY
 	t.Reload = uint(TANK_RELOAD_VALUE)
 	t.Trigger = false
-	printTankShape(t)
-	log.Printf("shoting shotevent=%+v\n", shotevent)
+	//printTankShape(t)
+	//log.Printf("shoting shotevent=%+v\n", shotevent)
 	return &shotevent
 }
 

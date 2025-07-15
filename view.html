@@ -18,7 +18,7 @@
 <script>
 const mapElem = document.getElementById("map");
 
-const ws = new WebSocket("ws://192.168.10.233:8887/mapws");
+const ws = new WebSocket("ws://192.168.10.233:8888/mapws");
 
 ws.onmessage = function(event) {
     mapElem.textContent = event.data;

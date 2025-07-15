@@ -78,11 +78,11 @@ func sendConnectNotice(client *model.Client) error {
 	if err != nil {
 		return err
 	}
-	log.Printf("lock 1")
+
 	client.WriteMutex.Lock()
 	defer client.WriteMutex.Unlock()
 	err = client.Conn.WriteMessage(websocket.TextMessage, data)
-	log.Printf("unlock 1")
+
 	return err
 }
 
@@ -93,11 +93,11 @@ func sendNoSpawnNotice(client *model.Client, username string) {
 		log.Println("Failed to marshal game state:", err)
 		return
 	}
-	log.Printf("lock 2")
+
 	client.WriteMutex.Lock()
 	client.Conn.WriteMessage(websocket.TextMessage, data)
 	client.WriteMutex.Unlock()
-	log.Printf("unlock 2")
+
 }
 
 // 处理客户端消息循环
@@ -128,7 +128,7 @@ func handleClientMessages(client *model.Client) {
 			break
 		}
 
-		// 解析客户端发送的 JSON 消息
+		// 解析客户端发送的 JSON 消消息
 		_, _, payload, err := UnpackWebMessage(msg)
 		if err != nil {
 			log.Printf("❌ Failed to parse JSON from %s: %v", client.ID, err)
@@ -155,11 +155,12 @@ func processOperatePayload(client *model.Client, op model.OperatePayload) {
 	if moveDir != model.DirNone {
 		client.Tank.GunFacing = moveDir
 	}
-
+	log.Printf(ColorGreen+"[move event]"+ColorReset+" tank %s move to (%d,%d) facing %d",
+		client.ID, client.Tank.LocalX, client.Tank.LocalY, client.Tank.Orientation)
 	// 检查是否开火
 	if op.Action == "fire" && client.Tank.Reload == 0 {
-		log.Printf("🔥 tank %s fires (reload OK)", client.ID)
 		se := OpenFire(client.Tank)
+		log.Printf(ColorBlue+"[shot event]"+ColorReset+" tank %s fires (reload OK)", client.ID)
 		data, err := RePackWebMessageJson(3, se, "broadcast message gamer")
 		if err != nil {
 			log.Println("Failed to marshal game state:", err)
@@ -171,22 +172,38 @@ func processOperatePayload(client *model.Client, op model.OperatePayload) {
 
 // 处理命中事件
 func processHitPayload(oh model.HitPayload) {
+	model.ClientsMu.Lock()
+	defer model.ClientsMu.Unlock()
+
+	var victimClient *model.Client
+	for _, c := range model.Clients {
+		if c.Tank != nil && c.Tank.ID == oh.Victim {
+			victimClient = c
+			break
+		} else if c.Tank != nil && c.Tank.ID == oh.Username {
+			c.Tank.Point += 1
+		}
+	}
+
+	if victimClient == nil {
+		log.Printf("⚠️ Victim tank %s not found among clients, hit by %s", oh.Victim, oh.Username)
+		return
+	}
+
+	// 释放并重新分配坦克
+	FreeTank(victimClient.Tank)
+	victimClient.Tank = allocateTank(oh.Victim)
+
+	// 只有存在被击中人时才广播
 	data, err := RePackWebMessageJson(7, oh, "broadcast message gamer")
 	if err != nil {
 		log.Println("Failed to marshal game state:", err)
 		return
 	}
-	log.Println("HitPayload")
-	// 这里可根据业务逻辑判断消息有效性
-	model.ClientsMu.Lock()
-	defer model.ClientsMu.Unlock()
+	log.Printf(ColorRed+"[hit event]"+ColorReset+" tank %s hit by %s", oh.Victim, oh.Username)
 	for _, c := range model.Clients {
 		if err := c.Conn.WriteMessage(websocket.TextMessage, data); err != nil {
 			log.Printf("Error sending to %s: %v\n", c.ID, err)
-		}
-		if c.Tank.ID == oh.Victim {
-			FreeTank(c.Tank)
-			c.Tank = allocateTank(oh.Victim)
 		}
 	}
 }
@@ -196,11 +213,11 @@ func broadcastToAllClients(data []byte, logPrefix string) {
 	model.ClientsMu.Lock()
 	defer model.ClientsMu.Unlock()
 	for _, c := range model.Clients {
-		log.Printf("lock 3")
+
 		c.WriteMutex.Lock()
 		err := c.Conn.WriteMessage(websocket.TextMessage, data)
 		c.WriteMutex.Unlock()
-		log.Printf("unlock 3")
+
 		if err != nil {
 			log.Printf("%s Error sending to %s: %v\n", logPrefix, c.ID, err)
 		}
@@ -227,13 +244,12 @@ func BroadcastGameState() {
 	}
 	model.ClientsMu.Lock()
 	defer model.ClientsMu.Unlock()
-	log.Println(model.Clients)
 	for _, c := range model.Clients {
-		log.Printf("lock 4")
-		c.WriteMutex.Lock() // 加锁
+
+		c.WriteMutex.Lock()
 		err := c.Conn.WriteMessage(websocket.TextMessage, data)
-		c.WriteMutex.Unlock() // 解锁
-		log.Printf("unlock 4")
+		c.WriteMutex.Unlock()
+
 		if err != nil {
 			log.Printf("Broadcast map Error sending to %s: %v\n", c.ID, err)
 		}
@@ -259,11 +275,11 @@ func SendConfig(c *model.Client) {
 		log.Println("Failed to marshal game state:", err)
 		return
 	}
-	log.Printf("lock 5")
+
 	c.WriteMutex.Lock()
 	err = c.Conn.WriteMessage(websocket.TextMessage, data)
 	c.WriteMutex.Unlock()
-	log.Printf("unlock 5")
+
 	if err != nil {
 		log.Println("write message error:", err)
 		return

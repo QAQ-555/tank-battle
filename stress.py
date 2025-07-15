@@ -6,7 +6,7 @@ import random
 import string
 
 # 服务器WebSocket地址（根据实际情况修改）
-WS_URL = "ws://localhost:8887/ws"
+WS_URL = "ws://localhost:8888/ws"
 # 并发连接数
 CONCURRENT_CONNECTIONS = 500
 # 每个连接的生命周期（秒）
@@ -27,7 +27,15 @@ def websocket_client():
         ws.connect(WS_URL)
         print(f"已建立连接: {username}")
 
-        # 发送用户名验证消息 (对应RequestPayload类型16)
+        # 随机选择断开阶段
+        stage = random.choice([1, 2, 3])
+
+        if stage == 1:
+            # 阶段1：刚连接就断开
+            print(f"{username} 阶段1断开")
+            return
+
+        # 阶段2/3：发送用户名验证消息
         auth_msg = {
             "Type": 16,
             "ID": username,
@@ -38,7 +46,12 @@ def websocket_client():
         }
         ws.send(json.dumps(auth_msg))
 
-        # 短暂等待后断开连接（触发服务器写入已关闭连接）
+        if stage == 2:
+            # 阶段2：发送完用户名就断开
+            print(f"{username} 阶段2断开")
+            return
+
+        # 阶段3：正常等待后断开
         time.sleep(CONNECTION_LIFETIME)
 
     except Exception as e:
