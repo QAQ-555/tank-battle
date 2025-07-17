@@ -55,7 +55,13 @@ var (
 	ShotedtanksMu sync.Mutex
 	Usernames     []string
 	UsernameMu    sync.Mutex
+	EdgePoints    = make(map[[2]int]byte)
 )
+
+type MapPoint struct {
+	X uint `json:"x"`
+	Y uint `json:"y"`
+}
 
 // 通信壳
 type WebMessage struct {
@@ -141,7 +147,8 @@ type NoticePayload struct {
 }
 
 type RespawnPayload struct {
-	Notice string `json:"notice"`
+	Username string `json:"username"`
+	Success  bool   `json:"success"`
 }
 
 // 地图数据

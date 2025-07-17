@@ -140,6 +140,8 @@ func handleClientMessages(client *model.Client) {
 			processOperatePayload(client, v)
 		case model.HitPayload:
 			processHitPayload(v)
+		case model.RespawnPayload:
+			processRespawnPayload(v)
 		default:
 			log.Printf("⚠️ payload 不是 OperatePayload/HitPayload，而是：%T", payload)
 		}
@@ -191,8 +193,8 @@ func processHitPayload(oh model.HitPayload) {
 	}
 
 	// 释放并重新分配坦克
-	FreeTank(victimClient.Tank)
-	victimClient.Tank = allocateTank(oh.Victim)
+
+	victimClient.Tank.Status = model.StatusFree
 
 	// 只有存在被击中人时才广播
 	data, err := RePackWebMessageJson(7, oh, "broadcast message gamer")
@@ -200,12 +202,39 @@ func processHitPayload(oh model.HitPayload) {
 		log.Println("Failed to marshal game state:", err)
 		return
 	}
+
 	log.Printf(ColorRed+"[hit event]"+ColorReset+" tank %s hit by %s", oh.Victim, oh.Username)
 	for _, c := range model.Clients {
 		if err := c.Conn.WriteMessage(websocket.TextMessage, data); err != nil {
 			log.Printf("Error sending to %s: %v\n", c.ID, err)
 		}
 	}
+}
+
+func processRespawnPayload(p model.RespawnPayload) {
+	log.Printf("[respawn event] 开始处理用户 %s 请求重生", p.Username)
+
+	model.ClientsMu.Lock()
+	log.Printf("[respawn event] 已获取 ClientsMu 锁")
+	defer func() {
+		log.Printf("[respawn event] 释放 ClientsMu 锁")
+		model.ClientsMu.Unlock()
+	}()
+
+	for _, c := range model.Clients {
+		if c.Tank != nil && c.Tank.ID == p.Username {
+			newTank := allocateTank(p.Username)
+			if newTank == nil {
+				log.Printf("[respawn event] allocateTank 失败，无法为 %s 分配新坦克", p.Username)
+				return
+			}
+			newTank.Point = c.Tank.Point
+			FreeTank(c.Tank)
+			c.Tank = newTank
+			return
+		}
+	}
+	log.Printf("[respawn event] 未找到用户 %s", p.Username)
 }
 
 // 广播消息到所有客户端
@@ -270,6 +299,7 @@ func SendConfig(c *model.Client) {
 		Tankfacing:   c.Tank.GunFacing,
 		ServerID:     c.ID,
 	}
+
 	data, err := RePackWebMessageJson(1, config, c.ID)
 	if err != nil {
 		log.Println("Failed to marshal game state:", err)
@@ -335,6 +365,12 @@ func UnpackWebMessage(data []byte) (byte, string, interface{}, error) {
 			return 0, "", nil, err
 		}
 		payload = hp
+	case 18:
+		var rp model.RespawnPayload
+		if err := json.Unmarshal(payloadBytes, &rp); err != nil {
+			return 0, "", nil, err
+		}
+		payload = rp
 	default:
 		return 0, "", nil, fmt.Errorf("unknown message type: %d", mes.Type)
 	}
@@ -453,10 +489,10 @@ func handleRegisterMessage(c *model.Client, msg []byte) (bool, string, error) {
 		log.Println("Failed to marshal notice payload:", err)
 		return false, "", nil
 	}
-	log.Printf("lock 6")
+
 	c.WriteMutex.Lock()
 	c.Conn.WriteMessage(websocket.TextMessage, data)
 	c.WriteMutex.Unlock()
-	log.Printf("lock 6")
+
 	return false, "", nil
 }

@@ -126,20 +126,26 @@ func moveTank(t *model.Tank) {
 	newY := int(t.LocalY) + dy
 
 	if !isWithinBounds(newX, newY) {
-		//log.Printf("Tank at (%d,%d) cannot move %v — out of bounds", t.LocalX, t.LocalY, t.Orientation)
 		return
 	}
 
-	if !canMoveTo(newX, newY) {
-		//log.Printf("Tank at (%d,%d) cannot move %v — blocked", t.LocalX, t.LocalY, t.Orientation)
+	// 检查斜向移动时需要额外验证相邻格子
+	isDiagonal := dx != 0 && dy != 0
+	if isDiagonal {
+		// 斜向移动需同时检查目标格、X方向格和Y方向格
+		if !canMoveTo(newX, newY) ||
+			!canMoveTo(newX, int(t.LocalY)) &&
+				!canMoveTo(int(t.LocalX), newY) {
+			return
+		}
+	} else if !canMoveTo(newX, newY) {
+		// 非斜向移动只需检查目标格
 		return
 	}
 
 	// 更新位置
 	t.LocalX = uint(newX)
 	t.LocalY = uint(newY)
-
-	//log.Printf("Tank %s moved to (%d,%d) facing %d", t.ID, t.LocalX, t.LocalY, t.Orientation)
 }
 
 // 根据方向返回 dx, dy
