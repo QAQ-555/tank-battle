@@ -13,8 +13,8 @@ var FlagChan = make(chan bool)
 const (
 	MAP_SIZE_X          uint = 1542
 	MAP_SIZE_Y          uint = 512
-	TICK_INTERVAL_MS         = 1000
-	MAP_RENDER_MS            = 1000
+	TICK_INTERVAL_MS         = 50
+	MAP_RENDER_MS            = 50
 	WAIT_REPLY_TIME          = 60
 	TANK_RELOAD_SECONDS      = 3
 ) //建立链接发送数据
@@ -73,15 +73,16 @@ type WebMessage struct {
 
 // 发送地图信息
 type MapConfig struct {
-	Map          []byte `json:"map"`
-	MapSizeX     uint   `json:"map_size_x"`
-	MapSizeY     uint   `json:"map_size_y"`
-	TankCoordX   uint   `json:"tank_coord_x"`
-	TankCoordY   uint   `json:"tank_coord_y"`
-	Tankfacing   byte   `json:"tank_facing"`
-	TickInterval int    `json:"tick_interval_ms"`
-	MapRenderMS  int    `json:"map_render_ms"`
-	ServerID     string `json:"username"`
+	Map          []byte  `json:"map"`
+	MapSizeX     uint    `json:"map_size_x"`
+	MapSizeY     uint    `json:"map_size_y"`
+	TankCoordX   uint    `json:"tank_coord_x"`
+	TankCoordY   uint    `json:"tank_coord_y"`
+	Tankfacing   byte    `json:"tank_facing"`
+	TickInterval int     `json:"tick_interval_ms"`
+	MapRenderMS  int     `json:"map_render_ms"`
+	ServerID     string  `json:"username"`
+	Tanks        []*Tank `json:"tanks"`
 }
 
 // 坦克状态
@@ -93,7 +94,7 @@ type Tank struct {
 	GunFacing   byte   `json:"gunfacing"`
 	Status      byte   `json:"status"`
 	Orientation byte   `json:"orientation"`
-	ID          string `json:"id"`
+	ID          string `json:"username"`
 	Point       int    `json:"point"`
 }
 

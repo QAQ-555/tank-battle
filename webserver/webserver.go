@@ -42,7 +42,9 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 	}
 	log.Println("✅ 成功获取 username:", username)
 	client.ID = username
-
+	model.ClientsMu.Lock()
+	model.Clients[username] = client
+	model.ClientsMu.Unlock()
 	// 5. 为客户端分配坦克
 	tank := allocateTank(username)
 	if tank == nil {
@@ -54,9 +56,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 6. 添加客户端到全局列表
-	model.ClientsMu.Lock()
-	model.Clients[username] = client
-	model.ClientsMu.Unlock()
+
 	client.Tank = tank
 
 	// 7. 发送配置信息
@@ -328,6 +328,7 @@ func SendConfig(c *model.Client) {
 		TankCoordY:   c.Tank.LocalY,
 		Tankfacing:   c.Tank.GunFacing,
 		ServerID:     c.ID,
+		Tanks:        GetActiveTanks(),
 	}
 
 	data, err := RePackWebMessageJson(1, config, c.ID)
