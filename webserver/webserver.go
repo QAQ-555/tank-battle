@@ -71,6 +71,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 
 // 发送连接成功通知
 func sendConnectNotice(client *model.Client) error {
+
 	notice := model.NoticePayload{
 		Notice: "websocket connect success",
 	}
@@ -175,7 +176,6 @@ func processOperatePayload(client *model.Client, op model.OperatePayload) {
 // 处理命中事件
 func processHitPayload(oh model.HitPayload) {
 	model.ClientsMu.Lock()
-	defer model.ClientsMu.Unlock()
 
 	var victimClient *model.Client
 	for _, c := range model.Clients {
@@ -186,7 +186,7 @@ func processHitPayload(oh model.HitPayload) {
 			c.Tank.Point += 1
 		}
 	}
-
+	model.ClientsMu.Unlock()
 	if victimClient == nil {
 		log.Printf("⚠️ Victim tank %s not found among clients, hit by %s", oh.Victim, oh.Username)
 		return
@@ -195,20 +195,27 @@ func processHitPayload(oh model.HitPayload) {
 	// 释放并重新分配坦克
 
 	victimClient.Tank.Status = model.StatusFree
+	tankchange := model.TankChangePayload{
+		Username: victimClient.ID,
+		TurnTo:   false,
+		X:        victimClient.Tank.LocalX,
+		Y:        victimClient.Tank.LocalY,
+	}
+	data, err := RePackWebMessageJson(5, tankchange, "")
+	if err != nil {
+		log.Println("Failed to marshal game state:", err)
+	}
+	broadcastToAllClients(data, "Broadcast change")
 
 	// 只有存在被击中人时才广播
-	data, err := RePackWebMessageJson(7, oh, "broadcast message gamer")
+	data, err = RePackWebMessageJson(7, oh, "broadcast message gamer")
 	if err != nil {
 		log.Println("Failed to marshal game state:", err)
 		return
 	}
 
 	log.Printf(ColorRed+"[hit event]"+ColorReset+" tank %s hit by %s", oh.Victim, oh.Username)
-	for _, c := range model.Clients {
-		if err := c.Conn.WriteMessage(websocket.TextMessage, data); err != nil {
-			log.Printf("Error sending to %s: %v\n", c.ID, err)
-		}
-	}
+	broadcastToAllClients(data, "Broadcast victim")
 }
 
 func processRespawnPayload(p model.RespawnPayload) {
@@ -216,25 +223,48 @@ func processRespawnPayload(p model.RespawnPayload) {
 
 	model.ClientsMu.Lock()
 	log.Printf("[respawn event] 已获取 ClientsMu 锁")
+
+	var targetClient *model.Client
+	for _, c := range model.Clients {
+		if c.Tank != nil && c.Tank.ID == p.Username {
+			targetClient = c
+			break
+		}
+	}
+
+	// 找到目标客户端后，释放 ClientsMu 锁
+	model.ClientsMu.Unlock()
+	log.Printf("[respawn event] 释放 ClientsMu 锁")
+
+	if targetClient == nil {
+		log.Printf("[respawn event] 未找到用户 %s", p.Username)
+		return
+	}
+
+	// 调用 allocateTank 函数，此时无锁冲突
+	newTank := allocateTank(p.Username)
+	if newTank == nil {
+		log.Printf("[respawn event] allocateTank 失败，无法为 %s 分配新坦克", p.Username)
+		return
+	}
+
+	// 重新获取 ClientsMu 锁以更新客户端信息
+	model.ClientsMu.Lock()
+	log.Printf("[respawn event] 重新获取 ClientsMu 锁")
 	defer func() {
 		log.Printf("[respawn event] 释放 ClientsMu 锁")
 		model.ClientsMu.Unlock()
 	}()
 
-	for _, c := range model.Clients {
-		if c.Tank != nil && c.Tank.ID == p.Username {
-			newTank := allocateTank(p.Username)
-			if newTank == nil {
-				log.Printf("[respawn event] allocateTank 失败，无法为 %s 分配新坦克", p.Username)
-				return
-			}
-			newTank.Point = c.Tank.Point
-			FreeTank(c.Tank)
-			c.Tank = newTank
-			return
-		}
+	// 确保目标客户端仍然有效
+	if targetClient.Tank != nil && targetClient.Tank.ID == p.Username {
+		newTank.Point = targetClient.Tank.Point
+		FreeTank(targetClient.Tank)
+		targetClient.Tank = newTank
+	} else {
+		log.Printf("[respawn event] 处理过程中用户 %s 已断开连接", p.Username)
 	}
-	log.Printf("[respawn event] 未找到用户 %s", p.Username)
+
 }
 
 // 广播消息到所有客户端

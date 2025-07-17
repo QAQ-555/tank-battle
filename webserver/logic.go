@@ -256,6 +256,17 @@ func allocateTank(id string) *model.Tank {
 			}
 			model.SpawnTanks = append(model.SpawnTanks, &t)
 			gamemap.MarkTankOnMap(&t, 1)
+			tankchange := model.TankChangePayload{
+				Username: id,
+				TurnTo:   true,
+				X:        uint(r_x),
+				Y:        uint(r_y),
+			}
+			data, err := RePackWebMessageJson(5, tankchange, "")
+			if err != nil {
+				log.Println("Failed to marshal game state:", err)
+			}
+			broadcastToAllClients(data, "Broadcast change")
 			return &t
 		}
 	}
