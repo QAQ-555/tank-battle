@@ -68,9 +68,10 @@ type MapPoint struct {
 }
 
 type Block struct {
-	P []MapPoint `json:"blockpoint"`
-	L int        `json:"length"`
-	W int        `json:"width"`
+	P   []MapPoint `json:"blockpoints"`
+	L   int        `json:"length"`
+	W   int        `json:"width"`
+	Dir byte       `json:"dir"`
 }
 
 // 通信壳
@@ -93,7 +94,7 @@ type MapConfig struct {
 	MapRenderMS  int      `json:"map_render_ms"`
 	ServerID     string   `json:"username"`
 	Tanks        []*Tank  `json:"tanks"`
-	Blocks       []*Block `json:"Blocks"`
+	Blocks       []*Block `json:"-"`
 }
 
 // 坦克状态
