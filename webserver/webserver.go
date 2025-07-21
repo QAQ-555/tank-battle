@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"time"
 
-	gamemap "example.com/lite_demo/map"
 	"example.com/lite_demo/model"
 	"github.com/gorilla/websocket"
 )
@@ -319,7 +318,7 @@ func BroadcastGameState() {
 func SendConfig(c *model.Client) {
 
 	config := model.MapConfig{
-		Map:          gamemap.GetMap(),
+		Map:          model.Blocks,
 		MapSizeX:     model.MAP_SIZE_X,
 		MapSizeY:     model.MAP_SIZE_Y,
 		TickInterval: model.TICK_INTERVAL_MS,

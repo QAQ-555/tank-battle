@@ -17,6 +17,8 @@ const (
 	MAP_RENDER_MS            = 50
 	WAIT_REPLY_TIME          = 60
 	TANK_RELOAD_SECONDS      = 3
+	BOCLK_LENTH              = 20 //must even
+	BLOCK_WIDTH              = 10
 ) //建立链接发送数据
 
 var TANK_RELOAD_VALUE = TANK_RELOAD_SECONDS * 1000 / MAP_RENDER_MS * 5
@@ -56,11 +58,19 @@ var (
 	Usernames     []string
 	UsernameMu    sync.Mutex
 	EdgePoints    = make(map[[2]int]byte)
+	Blocks        []*Block
+	BlocksMu      sync.Mutex
 )
 
 type MapPoint struct {
 	X uint `json:"x"`
 	Y uint `json:"y"`
+}
+
+type Block struct {
+	P []MapPoint `json:"blockpoint"`
+	L int        `json:"length"`
+	W int        `json:"width"`
 }
 
 // 通信壳
@@ -73,16 +83,17 @@ type WebMessage struct {
 
 // 发送地图信息
 type MapConfig struct {
-	Map          []byte  `json:"map"`
-	MapSizeX     uint    `json:"map_size_x"`
-	MapSizeY     uint    `json:"map_size_y"`
-	TankCoordX   uint    `json:"tank_coord_x"`
-	TankCoordY   uint    `json:"tank_coord_y"`
-	Tankfacing   byte    `json:"tank_facing"`
-	TickInterval int     `json:"tick_interval_ms"`
-	MapRenderMS  int     `json:"map_render_ms"`
-	ServerID     string  `json:"username"`
-	Tanks        []*Tank `json:"tanks"`
+	Map          []*Block `json:"map"`
+	MapSizeX     uint     `json:"map_size_x"`
+	MapSizeY     uint     `json:"map_size_y"`
+	TankCoordX   uint     `json:"tank_coord_x"`
+	TankCoordY   uint     `json:"tank_coord_y"`
+	Tankfacing   byte     `json:"tank_facing"`
+	TickInterval int      `json:"tick_interval_ms"`
+	MapRenderMS  int      `json:"map_render_ms"`
+	ServerID     string   `json:"username"`
+	Tanks        []*Tank  `json:"tanks"`
+	Blocks       []*Block `json:"Blocks"`
 }
 
 // 坦克状态

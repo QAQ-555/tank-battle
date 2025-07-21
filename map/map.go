@@ -14,6 +14,42 @@ import (
 	"github.com/gorilla/websocket"
 )
 
+func FindBlock(x, y, tx, ty uint, dir byte) bool {
+	// 获取方向的偏移量
+	dx, dy := getDirectionDelta(dir)
+	//log.Printf("FindBlock: x=%d, y=%d, tx=%d, ty=%d, dx = %d, dy = %d\n", x, y, tx, ty, dx, dy)
+	currentX, currentY := int(x), int(y)
+	for {
+		//log.Printf("currentX=%d, currentY=%d", currentX, currentY)
+		currentX += dx
+		currentY += dy
+		//log.Printf("nextX=%d, nextY=%d", currentX, currentY)
+		// 检查是否超出地图范围
+		if !isWithinBounds(currentX, currentY) {
+			log.Printf("FindBlock: out of bounds(%d,%d)", currentX, currentY)
+			return false
+		}
+
+		// 检查是否到达目标点
+		if uint(currentX) == tx && uint(currentY) == ty {
+			break
+		}
+
+		// 检查是否有阻挡
+		if model.Map[currentY][currentX] != 0 {
+			log.Printf("FindBlock: hit block(%d,%d)", currentX, currentY)
+			return false
+		}
+	}
+
+	return true
+}
+
+func isWithinBounds(x, y int) bool {
+	return x >= 0 && x < int(model.MAP_SIZE_X) &&
+		y >= 0 && y < int(model.MAP_SIZE_Y)
+}
+
 // 清空地图
 func clearMap() {
 	for y := 0; y < int(model.MAP_SIZE_Y); y++ {
@@ -184,94 +220,13 @@ func GenerateCircle(centerX, centerY, radius int) int {
 			dx, dy := newX-centerX, newY-centerY
 			if dx*dx+dy*dy <= radius*radius {
 				model.Map[newY][newX] = 3
+
 				visited[newPoint] = true
 				queue = append(queue, newPoint)
 			}
 		}
 	}
 	return 0
-}
-
-func Maprandom() {
-	for {
-		clearMap()
-		model.EdgePoints = make(map[[2]int]byte)
-		// 使用泊松盘采样生成随机点
-		x0, y0, x1, y1, r := 0.0, 0.0, float64(model.MAP_SIZE_X), float64(model.MAP_SIZE_Y), 175.0
-		k := 100
-
-		// 生成点
-		points := poissondisc.Sample(x0, y0, x1, y1, r, k, nil)
-
-		// 将点四舍五入到整型并填充到 grid
-		for _, p := range points {
-			x, y := int(math.Round(p.X)), int(math.Round(p.Y)) // 关键修改
-			if x >= 0 && y >= 0 && x < int(model.MAP_SIZE_X) && y < int(model.MAP_SIZE_Y) {
-				if rand.Float64() < 0.7 {
-					model.Map[y][x] = 2 // 蓝色点
-					model.EdgePoints[[2]int{int(x), int(y)}] = 2
-				} else {
-					model.Map[y][x] = 3 // 绿色点
-					model.EdgePoints[[2]int{int(x), int(y)}] = 3
-				}
-
-			}
-		}
-		for point, value := range model.EdgePoints {
-			x, y := point[0], point[1]
-			switch value {
-			case 3:
-				//log.Printf("[河流生成] 开始生成河流 - 起点: (%d,%d), 计划步数: %d\n", x, y, 20)
-				// fmt.Println("程序正在运行，按回车键继续...")
-
-				// var input string
-				// fmt.Scanln(&input)
-
-				// fmt.Println("继续执行程序...")
-				if rand.Float64() < 0.5 {
-					GenerateTree(x, y, rand.Intn(10)+50)
-				} else {
-					GenerateCircle(x, y, rand.Intn(10)+50)
-				}
-			case 2:
-				//log.Printf("[河流生成] 开始生成河流 - 起点: (%d,%d), 计划步数: %d\n", x, y, 20)
-				// fmt.Println("程序正在运行，按回车键继续...")
-
-				// var input string
-				// fmt.Scanln(&input)
-
-				// fmt.Println("继续执行程序...")
-				GenerateRiver(x, y, rand.Intn(200)+100) // 随机生成河流，步数在50到150之间
-			}
-		}
-		if CheckZeroConnectivity() {
-			dc := gg.NewContext(int(model.MAP_SIZE_X), int(model.MAP_SIZE_Y))
-			dc.SetRGB(1, 1, 1) // 白色背景
-			dc.Clear()
-
-			for y := 0; y < int(model.MAP_SIZE_Y); y++ {
-				for x := 0; x < int(model.MAP_SIZE_X); x++ {
-					switch model.Map[y][x] {
-					case 2:
-						dc.SetRGB(0, 0, 1) // 蓝色点
-						dc.DrawPoint(float64(x), float64(y), 1)
-						dc.Fill()
-					case 3:
-						dc.SetRGB(0, 1, 0) // 绿色点
-						dc.DrawPoint(float64(x), float64(y), 1)
-						dc.Fill()
-					}
-				}
-			}
-
-			if err := dc.SavePNG("grid_points.png"); err != nil {
-				log.Fatal(err)
-			}
-			break // 满足条件，退出循环
-		}
-		log.Printf("[地图生成] 生成的地图不满足连通性，重新生成...")
-	}
-	log.Printf("[地图生成] 地图生成完成，已保存为 grid_points.png")
 }
 
 func CheckZeroConnectivity() bool {
@@ -432,4 +387,150 @@ func WsMapHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+}
+
+func Trywall(r_x, r_y int, dir byte) bool {
+	//log.Printf("try build wall at (%d,%d), dir: %d", r_x, r_y, dir)
+	// 初始化标志为 true
+	flag := true
+
+	if dir != 2 && dir != 4 && dir != 6 && dir != 8 {
+		return false
+	}
+
+	if dir == 6 || dir == 4 {
+		// 水平方向检测
+		// 上水平边界检测
+		flag = flag && FindBlock(uint(r_x+int(model.BOCLK_LENTH/2)), uint(r_y+model.BLOCK_WIDTH/2), uint(r_x-int(model.BOCLK_LENTH/2)), uint(r_y+model.BLOCK_WIDTH/2), model.DirLeft)
+		// 下水平边界检测
+		flag = flag && FindBlock(uint(r_x+int(model.BOCLK_LENTH/2)), uint(r_y-model.BLOCK_WIDTH/2), uint(r_x-int(model.BOCLK_LENTH/2)), uint(r_y-model.BLOCK_WIDTH/2), model.DirLeft)
+		// 右垂直边界检测
+		flag = flag && FindBlock(uint(r_x+int(model.BOCLK_LENTH/2)), uint(r_y+model.BLOCK_WIDTH/2), uint(r_x+int(model.BOCLK_LENTH/2)), uint(r_y-model.BLOCK_WIDTH/2), model.DirUp)
+		// 左垂直边界检测
+		flag = flag && FindBlock(uint(r_x-int(model.BOCLK_LENTH/2)), uint(r_y+model.BLOCK_WIDTH/2), uint(r_x-int(model.BOCLK_LENTH/2)), uint(r_y-model.BLOCK_WIDTH/2), model.DirUp)
+	} else {
+		// 垂直方向检测（旋转 90 度）
+		// 左垂直边界检测
+		flag = flag && FindBlock(uint(r_x+model.BLOCK_WIDTH/2), uint(r_y+int(model.BOCLK_LENTH/2)), uint(r_x+model.BLOCK_WIDTH/2), uint(r_y-int(model.BOCLK_LENTH/2)), model.DirUp)
+		// 右垂直边界检测
+		flag = flag && FindBlock(uint(r_x-model.BLOCK_WIDTH/2), uint(r_y+int(model.BOCLK_LENTH/2)), uint(r_x-model.BLOCK_WIDTH/2), uint(r_y-int(model.BOCLK_LENTH/2)), model.DirUp)
+		// 上水平边界检测
+		flag = flag && FindBlock(uint(r_x+model.BLOCK_WIDTH/2), uint(r_y+int(model.BOCLK_LENTH/2)), uint(r_x-model.BLOCK_WIDTH/2), uint(r_y+int(model.BOCLK_LENTH/2)), model.DirLeft)
+		// 下水平边界检测
+		flag = flag && FindBlock(uint(r_x+model.BLOCK_WIDTH/2), uint(r_y-int(model.BOCLK_LENTH/2)), uint(r_x-model.BLOCK_WIDTH/2), uint(r_y-int(model.BOCLK_LENTH/2)), model.DirLeft)
+	}
+	//log.Printf("build wall result: %t", flag)
+	return flag
+}
+
+func buildwall(r_x, r_y int, dir byte) bool {
+	if Trywall(r_x, r_y, dir) {
+		if dir == 4 || dir == 6 {
+			minY := int(r_y - model.BLOCK_WIDTH/2)
+			maxY := int(r_y + model.BLOCK_WIDTH/2)
+			minX := int(r_x - int(model.BOCLK_LENTH/2))
+			maxX := int(r_x + int(model.BOCLK_LENTH/2))
+			for y := minY; y <= maxY; y++ {
+				for x := minX; x <= maxX; x++ {
+					// 判断是否在边缘
+					if isWithinBounds(x, y) {
+						model.Map[y][x] = 2
+					}
+				}
+			}
+		} else {
+			minY := int(r_y - model.BOCLK_LENTH/2)
+			maxY := int(r_y + model.BOCLK_LENTH/2)
+			minX := int(r_x - int(model.BLOCK_WIDTH/2))
+			maxX := int(r_x + int(model.BLOCK_WIDTH/2))
+			for y := minY; y <= maxY; y++ {
+				for x := minX; x <= maxX; x++ {
+					// 判断是否在边缘
+					if isWithinBounds(x, y) {
+						model.Map[y][x] = 2
+					}
+				}
+			}
+		}
+		return true
+	} else {
+		return false
+	}
+}
+func Maprandom() {
+	for {
+		clearMap()
+		model.EdgePoints = make(map[[2]int]byte)
+		// 使用泊松盘采样生成随机点
+		x0, y0, x1, y1, r := 0.0, 0.0, float64(model.MAP_SIZE_X), float64(model.MAP_SIZE_Y), 200.0
+		k := 100
+
+		// 生成点
+		points := poissondisc.Sample(x0, y0, x1, y1, r, k, nil)
+
+		// 将点四舍五入到整型并填充到 grid
+		for _, p := range points {
+			r_x, r_y := int(math.Round(p.X)), int(math.Round(p.Y)) // 关键修改
+			dir := rand.Intn(3)*2 + 2
+			num := rand.Intn(6) + 3
+			dx, dy := getDirectionDelta(byte(dir))
+			l := 0
+			w := 0
+			if dir == 4 || dir == 6 {
+				dx = dx * (model.BOCLK_LENTH + 1)
+				l = model.BOCLK_LENTH + 1
+				dy = dy * (model.BLOCK_WIDTH + 1)
+				w = model.BLOCK_WIDTH + 1
+			} else {
+				dx = dx * (model.BLOCK_WIDTH + 1)
+				l = model.BLOCK_WIDTH + 1
+				dy = dy * (model.BOCLK_LENTH + 1)
+				w = model.BOCLK_LENTH + 1
+			}
+			block := &model.Block{
+				L: l,
+				W: w,
+			}
+			log.Printf("[地图生成] 随机生成砖块: (%d,%d),方向：%d,step(%d,%d)", r_x, r_y, dir, dx, dy)
+			for i := 0; i < num; i++ {
+				if buildwall(r_x+dx*i, r_y+dy*i, byte(dir)) {
+					block.P = append(block.P, model.MapPoint{X: uint(r_x + dx*i), Y: uint(r_y + dy*i)})
+				}
+			}
+			if len(block.P) != 0 {
+				model.Blocks = append(model.Blocks, block)
+			}
+
+		}
+		if CheckZeroConnectivity() {
+			dc := gg.NewContext(int(model.MAP_SIZE_X), int(model.MAP_SIZE_Y))
+			dc.SetRGB(1, 1, 1) // 白色背景
+			dc.Clear()
+
+			for y := 0; y < int(model.MAP_SIZE_Y); y++ {
+				for x := 0; x < int(model.MAP_SIZE_X); x++ {
+					switch model.Map[y][x] {
+					case 2:
+						dc.SetRGB(0, 0, 1) // 蓝色点
+						dc.DrawPoint(float64(x), float64(y), 1)
+						dc.Fill()
+					case 3:
+						dc.SetRGB(0, 1, 0) // 绿色点
+						dc.DrawPoint(float64(x), float64(y), 1)
+						dc.Fill()
+					}
+				}
+			}
+
+			if err := dc.SavePNG("grid_points.png"); err != nil {
+				log.Fatal(err)
+			}
+			break // 满足条件，退出循环
+		}
+		log.Printf("[地图生成] 生成的地图不满足连通性，重新生成...")
+	}
+	for _, val := range model.Blocks {
+		log.Printf("block: %v", val)
+	}
+	log.Printf("[地图生成] 地图生成完成，已保存为 grid_points.png")
 }

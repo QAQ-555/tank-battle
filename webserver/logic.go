@@ -287,6 +287,28 @@ func FreeTank(target *model.Tank) {
 	}
 }
 
+// FindBlock 判断两点间是否有阻挡
+
+func ChebyshevDistance(x1, y1, x2, y2 int) int {
+	// 计算 x 轴和 y 轴上的差值绝对值
+	dx := abs(x1 - x2)
+	dy := abs(y1 - y2)
+
+	// 返回差值绝对值的最大值
+	if dx > dy {
+		return dx
+	}
+	return dy
+}
+
+// abs 计算整数的绝对值
+func abs(n int) int {
+	if n < 0 {
+		return -n
+	}
+	return n
+}
+
 // 从 model.Usernames 切片里删除 username
 func removeUsername(username string) {
 	model.UsernameMu.Lock()
