@@ -34,12 +34,12 @@ func MapRenderloop() {
 		for _, t := range model.SpawnTanks {
 			//坦克移动
 			if t.Status == model.StatusTaken {
-				gamemap.MarkTankOnMap(t, 0)
+				gamemap.MarkTankOnMap(t, 0, true)
 				moveTank(t)
 				// if t.Trigger { //更新坦克状态时，如果坦克扳机按下则发射子弹
 				// 	model.ShotEvents = append(model.ShotEvents, OpenFire(t))
 				// }
-				gamemap.MarkTankOnMap(t, 1)
+				gamemap.MarkTankOnMap(t, 1, true)
 			}
 			if t.Reload != 0 {
 				t.Reload -= 5
@@ -125,21 +125,17 @@ func moveTank(t *model.Tank) {
 	newX := int(t.LocalX) + dx
 	newY := int(t.LocalY) + dy
 
-	if !isWithinBounds(newX, newY) {
-		return
+	e_tank := &model.Tank{
+		LocalX:      uint(newX),
+		LocalY:      uint(newY),
+		Reload:      0,
+		Trigger:     false,
+		GunFacing:   t.GunFacing,
+		Status:      t.Status,
+		Orientation: t.Orientation,
+		ID:          t.ID,
 	}
-
-	// 检查斜向移动时需要额外验证相邻格子
-	isDiagonal := dx != 0 && dy != 0
-	if isDiagonal {
-		// 斜向移动需同时检查目标格、X方向格和Y方向格
-		if !canMoveTo(newX, newY) ||
-			!canMoveTo(newX, int(t.LocalY)) &&
-				!canMoveTo(int(t.LocalX), newY) {
-			return
-		}
-	} else if !canMoveTo(newX, newY) {
-		// 非斜向移动只需检查目标格
+	if !gamemap.MarkTankOnMap(e_tank, 1, false) {
 		return
 	}
 
@@ -243,7 +239,14 @@ func allocateTank(id string) *model.Tank {
 	for {
 		r_x := rand.Intn(int(model.MAP_SIZE_X))
 		r_y := rand.Intn(int(model.MAP_SIZE_Y))
-		if model.Map[r_y][r_x] == 0 {
+		if gamemap.MarkTankOnMap(&model.Tank{
+			LocalX:    uint(r_x),
+			LocalY:    uint(r_y),
+			Reload:    0,
+			Trigger:   false,
+			GunFacing: model.DirDown,
+			Status:    model.StatusTaken,
+		}, 0, false) {
 			t := model.Tank{
 				LocalX:      uint(r_x),
 				LocalY:      uint(r_y),
@@ -255,7 +258,7 @@ func allocateTank(id string) *model.Tank {
 				ID:          id,
 			}
 			model.SpawnTanks = append(model.SpawnTanks, &t)
-			gamemap.MarkTankOnMap(&t, 1)
+			gamemap.MarkTankOnMap(&t, 1, true)
 			tankchange := model.TankChangePayload{
 				Username: id,
 				TurnTo:   true,
@@ -276,7 +279,7 @@ func allocateTank(id string) *model.Tank {
 func FreeTank(target *model.Tank) {
 	model.SpawnTanksMu.Lock()
 	defer model.SpawnTanksMu.Unlock()
-	gamemap.MarkTankOnMap(target, 0)
+	gamemap.MarkTankOnMap(target, 0, true)
 	for i, t := range model.SpawnTanks {
 		if t == target {
 			// 用最后一个覆盖自己

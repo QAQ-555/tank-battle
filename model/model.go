@@ -11,14 +11,16 @@ import (
 var FlagChan = make(chan bool)
 
 const (
-	MAP_SIZE_X          uint = 1542
-	MAP_SIZE_Y          uint = 512
+	MAP_SIZE_X          uint = 500
+	MAP_SIZE_Y          uint = 500
 	TICK_INTERVAL_MS         = 50
 	MAP_RENDER_MS            = 50
 	WAIT_REPLY_TIME          = 60
 	TANK_RELOAD_SECONDS      = 3
 	BOCLK_LENTH              = 66 //must even
 	BLOCK_WIDTH              = 44
+	TANK_SIZE_X              = 87
+	TANK_SIZE_Y              = 77
 ) //建立链接发送数据
 
 var TANK_RELOAD_VALUE = TANK_RELOAD_SECONDS * 1000 / MAP_RENDER_MS * 5

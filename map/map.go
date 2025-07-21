@@ -340,16 +340,31 @@ func GetMap() []byte {
 }
 
 // 在地图上标记坦克（3x3）
-func MarkTankOnMap(t *model.Tank, val byte) {
-	// for dx := -1; dx <= 1; dx++ {
-	// 	for dy := -1; dy <= 1; dy++ {
-	// 		x := int(t.LocalX) + dxX
-	// 		y := int(t.LocalY) + dy
-	// 		if x >= 0 && x < int(model.MAP_SIZE_X) && y >= 0 && y < int(model.MAP_SIZE_Y) {
-	model.Map[t.LocalY][t.LocalX] = val
-	// 		}
-	// 	}
-	// }
+// MarkTankOnMap 标记坦克在地图上的位置，isRender 为 true 时渲染，为 false 时检测
+func MarkTankOnMap(t *model.Tank, val byte, isRender bool) bool {
+	// 初始化检测结果为 true
+	allEmpty := true
+	for dx := -((model.TANK_SIZE_X - 1) / 2); dx <= (model.TANK_SIZE_X-1)/2; dx++ {
+		for dy := -((model.TANK_SIZE_Y - 1) / 2); dy <= (model.TANK_SIZE_Y-1)/2; dy++ {
+			x := int(t.LocalX) + dx
+			y := int(t.LocalY) + dy
+			if x >= 0 && x < int(model.MAP_SIZE_X) && y >= 0 && y < int(model.MAP_SIZE_Y) {
+				if isRender {
+					// 渲染模式，在地图上标记坦克
+					model.Map[y][x] = val
+				} else {
+					// 检测模式，检查该位置是否为空
+					if model.Map[y][x] != 0 {
+						allEmpty = false
+					}
+				}
+			} else if !isRender {
+				// 检测模式下，超出地图范围视为非空
+				allEmpty = false
+			}
+		}
+	}
+	return allEmpty
 }
 
 func getMapAsString() string {
