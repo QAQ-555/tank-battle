@@ -17,8 +17,8 @@ const (
 	MAP_RENDER_MS            = 50
 	WAIT_REPLY_TIME          = 60
 	TANK_RELOAD_SECONDS      = 3
-	BOCLK_LENTH              = 20 //must even
-	BLOCK_WIDTH              = 10
+	BOCLK_LENTH              = 66 //must even
+	BLOCK_WIDTH              = 44
 ) //建立链接发送数据
 
 var TANK_RELOAD_VALUE = TANK_RELOAD_SECONDS * 1000 / MAP_RENDER_MS * 5

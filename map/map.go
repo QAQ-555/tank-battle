@@ -462,7 +462,7 @@ func Maprandom() {
 		clearMap()
 		model.EdgePoints = make(map[[2]int]byte)
 		// 使用泊松盘采样生成随机点
-		x0, y0, x1, y1, r := 0.0, 0.0, float64(model.MAP_SIZE_X), float64(model.MAP_SIZE_Y), 300.0
+		x0, y0, x1, y1, r := 0.0, 0.0, float64(model.MAP_SIZE_X), float64(model.MAP_SIZE_Y), 200.0
 		k := 100
 
 		// 生成点
@@ -471,28 +471,27 @@ func Maprandom() {
 		// 将点四舍五入到整型并填充到 grid
 		for _, p := range points {
 			r_x, r_y := int(math.Round(p.X)), int(math.Round(p.Y)) // 关键修改
-			dir := rand.Intn(3)*2 + 2
-			num := rand.Intn(3) + 1
+			dir := rand.Intn(4)*2 + 2
+			num := rand.Intn(3) + 2
 			dx, dy := getDirectionDelta(byte(dir))
-			l := 0
-			w := 0
+			l := model.BOCLK_LENTH
+			w := model.BLOCK_WIDTH
+			dir_deg := 0
 			if dir == 4 || dir == 6 {
 				dx = dx * (model.BOCLK_LENTH + 1)
-				l = model.BOCLK_LENTH
 				dy = dy * (model.BLOCK_WIDTH + 1)
-				w = model.BLOCK_WIDTH
+				dir_deg = 8
 			} else {
 				dx = dx * (model.BLOCK_WIDTH + 1)
-				l = model.BLOCK_WIDTH
 				dy = dy * (model.BOCLK_LENTH + 1)
-				w = model.BOCLK_LENTH
+				dir_deg = 4
 			}
 			block := &model.Block{
 				L:   l,
 				W:   w,
-				Dir: byte(dir),
+				Dir: byte(dir_deg),
 			}
-			log.Printf("[地图生成] 随机生成砖块: (%d,%d),方向：%d,step(%d,%d)", r_x, r_y, dir, dx, dy)
+			log.Printf("[地图生成] 随机生成砖块: (%d,%d),方向：%d %d,step(%d,%d)", r_x, r_y, dir, dir_deg, dx, dy)
 			for i := 0; i < num; i++ {
 				if buildwall(r_x+dx*i, r_y+dy*i, byte(dir)) {
 					block.P = append(block.P, model.MapPoint{X: uint(r_x + dx*i), Y: uint(r_y + dy*i)})

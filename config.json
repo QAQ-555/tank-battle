@@ -1,5 +1,5 @@
 {
-  "server_port": 8887,
+  "server_port": 8888,
   "websocket_path": "/ws",
   "map_websocket_path": "/mapws"
 }
