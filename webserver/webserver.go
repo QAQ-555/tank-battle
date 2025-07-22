@@ -8,7 +8,9 @@ import (
 	"time"
 
 	"example.com/lite_demo/model"
+	msgpack "example.com/lite_demo/test"
 	"github.com/gorilla/websocket"
+	"google.golang.org/protobuf/proto"
 )
 
 // 处理链接请求
@@ -70,18 +72,18 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 
 // 发送连接成功通知
 func sendConnectNotice(client *model.Client) error {
-
-	notice := model.NoticePayload{
-		Notice: "websocket connect success",
+	msg := &msgpack.MsgPack{
+		Type:   []byte("connect"),
+		Target: client.ID,
 	}
-	data, err := RePackWebMessageJson(0, notice, "perpartext")
+	msg_b, err := proto.Marshal(msg)
 	if err != nil {
 		return err
 	}
 
 	client.WriteMutex.Lock()
 	defer client.WriteMutex.Unlock()
-	err = client.Conn.WriteMessage(websocket.TextMessage, data)
+	err = client.Conn.WriteMessage(websocket.BinaryMessage, msg_b)
 
 	return err
 }

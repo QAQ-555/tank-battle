@@ -1,0 +1,23 @@
+syntax = "proto3";
+
+package msgpack;
+
+
+option go_package = "example.com/lite_demo/test;msgpack";
+
+import "payload/payload.proto";
+
+message MsgPack{
+    bytes type = 1;
+    string target = 2;
+    oneof payload {
+        payload.emojipayload emoji = 3;
+        payload.blockspayload blocks = 4;
+        payload.tankChangePayload tankChange = 5;
+        payload.requestPayload request = 6;
+        payload.hitPayload hit = 7;
+        payload.operatePayload operate = 8;
+        payload.shotPayload shot = 9;
+        string notice=10;
+    }
+}

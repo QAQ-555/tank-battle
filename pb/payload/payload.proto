@@ -1,0 +1,49 @@
+syntax = "proto3";
+
+package payload;
+
+option go_package = "example.com/lite_demo/test/payload;payload";
+// 修改为从根目录开始的相对路径
+import "datastruct/datastruct.proto";
+
+message emojipayload{
+    string username = 1;
+    bytes emoji = 2;
+}
+
+message blockspayload{
+    repeated datastruct.block p=1;
+}
+
+
+message tankChangePayload{
+    string username =1;
+    bool turnTo=2;
+    uint32 x=3;
+    uint32 y=4;
+}
+
+message requestPayload{
+    string username =1;
+    bool success=2;
+}
+
+message hitPayload{
+    string username =1;
+    string victim   =2;
+}
+
+message operatePayload{
+    bool up=1;
+    bool down=2;
+    bool left=3;
+    bool right=4;
+    string action=5;
+}
+
+message shotPayload{
+    string username =1;
+    uint32 x=2;
+    uint32 y=3;
+    bytes Facing=4;
+}
