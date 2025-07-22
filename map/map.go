@@ -523,7 +523,7 @@ func Maprandom() {
 				}
 			}
 
-			if err := dc.SavePNG("grid_points.png"); err != nil {
+			if err := dc.SavePNG("tools/grid_points.png"); err != nil {
 				log.Fatal(err)
 			}
 			break // 满足条件，退出循环
