@@ -8,6 +8,10 @@ import (
 
 	gamemap "example.com/lite_demo/map"
 	"example.com/lite_demo/model"
+	msgpack "example.com/lite_demo/test"
+	datastruct "example.com/lite_demo/test/datastruct"
+	"example.com/lite_demo/test/payload"
+	"google.golang.org/protobuf/proto"
 )
 
 const (
@@ -198,13 +202,35 @@ func GetActiveTanks() []*model.Tank {
 }
 
 // 构建游戏状态结构体
-func BuildGameState() *model.GameState {
-	return &model.GameState{
-		Tanks:      GetActiveTanks(),
-		ShotEvents: model.ShotEvents,
-		// Items: GetActiveItems(),
-		// Map: GetMap(),
+func BuildGameState() *msgpack.MsgPack {
+	mtanks := GetActiveTanks()
+	// 初始化 Payload 为 *msgpack.MsgPack_GameStatus 类型
+	prtanks := &msgpack.MsgPack{
+		Type:   []byte{model.TypeGameStatus}, // 假设设置消息类型
+		Target: "board cast all",
+		Payload: &msgpack.MsgPack_GameStatus{
+			GameStatus: &payload.GameStatusPayload{
+				Tanks: []*datastruct.Tank{},
+			},
+		},
 	}
+
+	for _, val := range mtanks {
+		tmp := &datastruct.Tank{
+			X:           uint32(val.LocalX),
+			Y:           uint32(val.LocalY),
+			Reload:      uint32(val.Reload),
+			Trigger:     val.Trigger,
+			GunFacing:   []byte{val.GunFacing},
+			Status:      []byte{val.Status},
+			Orientation: []byte{val.Orientation},
+			Username:    val.ID,
+			Point:       int32(val.Point),
+		}
+		// 由于已经初始化，这里可以直接类型断言
+		prtanks.Payload.(*msgpack.MsgPack_GameStatus).GameStatus.Tanks = append(prtanks.Payload.(*msgpack.MsgPack_GameStatus).GameStatus.Tanks, tmp)
+	}
+	return prtanks
 }
 
 // 初始化出生点
@@ -253,19 +279,29 @@ func allocateTank(id string) *model.Tank {
 				Status:      model.StatusTaken,
 				Orientation: model.DirNone,
 				ID:          id,
+				Point:       1,
 			}
 			model.SpawnTanks = append(model.SpawnTanks, &t)
 			gamemap.MarkTankOnMap(&t, 1)
-			tankchange := model.TankChangePayload{
-				Username: id,
-				TurnTo:   true,
-				X:        uint(r_x),
-				Y:        uint(r_y),
+
+			msg := &msgpack.MsgPack{
+				Type:   []byte{model.TypeTankChangeEvent},
+				Target: "all",
+				Payload: &msgpack.MsgPack_TankChange{
+					TankChange: &payload.TankChangePayload{
+						Username: id,
+						TurnTo:   true,
+						X:        uint32(t.LocalX),
+						Y:        uint32(t.LocalY),
+					},
+				},
 			}
-			data, err := RePackWebMessageJson(5, tankchange, "")
+
+			data, err := proto.Marshal(msg)
 			if err != nil {
 				log.Println("Failed to marshal game state:", err)
 			}
+
 			broadcastToAllClients(data, "Broadcast change")
 			return &t
 		}

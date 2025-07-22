@@ -40,6 +40,27 @@ const (
 	StatusTaken byte = 1
 ) //坦克状态
 
+// 发送消息类型常量定义，值小于 0x0f
+const (
+	TypeMessage         byte = 0    // type=0 提示消息
+	TypeInitData        byte = 1    // type=1 连接建立后初始化数据
+	TypeGameStatus      byte = 0x02 // type=2 游戏状态广播
+	TypeShotEvent       byte = 3    // type=3 射击事件广播
+	TypeErrorNotice     byte = 4    // type=4 错误提示
+	TypeTankChangeEvent byte = 5    // type=5 坦克变化事件广播
+	TypeHitEvent        byte = 7    // type=7 命中事件广播
+	TypeEmojiC          byte = 8    // type=8 客户端自定义表情
+)
+
+// 接收消息类型常量定义，值大于等于 0x0f
+const (
+	TypeTankOperation   byte = 0x0f // type=15 坦克操作指令
+	TypeRegisterRequest byte = 0x10 // type=16 注册请求
+	TypeHitNotice       byte = 0x11 // type=17 命中通知
+	TypeRespawnRequest  byte = 0x12 // type=18 复活请求
+	TypeEmojiS          byte = 0x13 // type=19 服务端转发自定义表情
+)
+
 var UP = websocket.Upgrader{
 	ReadBufferSize:  1024,
 	WriteBufferSize: 1024,
