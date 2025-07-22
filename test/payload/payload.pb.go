@@ -76,7 +76,7 @@ func (x *Emojipayload) GetEmoji() []byte {
 
 type Blockspayload struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	P             []*datastruct.Block    `protobuf:"bytes,1,rep,name=p,proto3" json:"p,omitempty"`
+	Blockpoints   []*datastruct.Block    `protobuf:"bytes,1,rep,name=blockpoints,proto3" json:"blockpoints,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -111,11 +111,119 @@ func (*Blockspayload) Descriptor() ([]byte, []int) {
 	return file_payload_payload_proto_rawDescGZIP(), []int{1}
 }
 
-func (x *Blockspayload) GetP() []*datastruct.Block {
+func (x *Blockspayload) GetBlockpoints() []*datastruct.Block {
 	if x != nil {
-		return x.P
+		return x.Blockpoints
 	}
 	return nil
+}
+
+type GameConfigPayload struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	MapSizeX      uint32                 `protobuf:"varint,1,opt,name=mapSizeX,proto3" json:"mapSizeX,omitempty"`
+	MapSizeY      uint32                 `protobuf:"varint,2,opt,name=mapSizeY,proto3" json:"mapSizeY,omitempty"`
+	Map           *Blockspayload         `protobuf:"bytes,3,opt,name=map,proto3" json:"map,omitempty"`
+	TickInterval  int32                  `protobuf:"varint,4,opt,name=tickInterval,proto3" json:"tickInterval,omitempty"`
+	MapRenderMS   int32                  `protobuf:"varint,5,opt,name=mapRenderMS,proto3" json:"mapRenderMS,omitempty"`
+	Username      string                 `protobuf:"bytes,6,opt,name=username,proto3" json:"username,omitempty"`
+	Tanks         []*datastruct.Tank     `protobuf:"bytes,7,rep,name=tanks,proto3" json:"tanks,omitempty"`
+	TankSizeX     int32                  `protobuf:"varint,8,opt,name=tankSizeX,proto3" json:"tankSizeX,omitempty"`
+	TankSizeY     int32                  `protobuf:"varint,9,opt,name=tankSizeY,proto3" json:"tankSizeY,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GameConfigPayload) Reset() {
+	*x = GameConfigPayload{}
+	mi := &file_payload_payload_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GameConfigPayload) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GameConfigPayload) ProtoMessage() {}
+
+func (x *GameConfigPayload) ProtoReflect() protoreflect.Message {
+	mi := &file_payload_payload_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GameConfigPayload.ProtoReflect.Descriptor instead.
+func (*GameConfigPayload) Descriptor() ([]byte, []int) {
+	return file_payload_payload_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *GameConfigPayload) GetMapSizeX() uint32 {
+	if x != nil {
+		return x.MapSizeX
+	}
+	return 0
+}
+
+func (x *GameConfigPayload) GetMapSizeY() uint32 {
+	if x != nil {
+		return x.MapSizeY
+	}
+	return 0
+}
+
+func (x *GameConfigPayload) GetMap() *Blockspayload {
+	if x != nil {
+		return x.Map
+	}
+	return nil
+}
+
+func (x *GameConfigPayload) GetTickInterval() int32 {
+	if x != nil {
+		return x.TickInterval
+	}
+	return 0
+}
+
+func (x *GameConfigPayload) GetMapRenderMS() int32 {
+	if x != nil {
+		return x.MapRenderMS
+	}
+	return 0
+}
+
+func (x *GameConfigPayload) GetUsername() string {
+	if x != nil {
+		return x.Username
+	}
+	return ""
+}
+
+func (x *GameConfigPayload) GetTanks() []*datastruct.Tank {
+	if x != nil {
+		return x.Tanks
+	}
+	return nil
+}
+
+func (x *GameConfigPayload) GetTankSizeX() int32 {
+	if x != nil {
+		return x.TankSizeX
+	}
+	return 0
+}
+
+func (x *GameConfigPayload) GetTankSizeY() int32 {
+	if x != nil {
+		return x.TankSizeY
+	}
+	return 0
 }
 
 type TankChangePayload struct {
@@ -130,7 +238,7 @@ type TankChangePayload struct {
 
 func (x *TankChangePayload) Reset() {
 	*x = TankChangePayload{}
-	mi := &file_payload_payload_proto_msgTypes[2]
+	mi := &file_payload_payload_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -142,7 +250,7 @@ func (x *TankChangePayload) String() string {
 func (*TankChangePayload) ProtoMessage() {}
 
 func (x *TankChangePayload) ProtoReflect() protoreflect.Message {
-	mi := &file_payload_payload_proto_msgTypes[2]
+	mi := &file_payload_payload_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -155,7 +263,7 @@ func (x *TankChangePayload) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TankChangePayload.ProtoReflect.Descriptor instead.
 func (*TankChangePayload) Descriptor() ([]byte, []int) {
-	return file_payload_payload_proto_rawDescGZIP(), []int{2}
+	return file_payload_payload_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *TankChangePayload) GetUsername() string {
@@ -186,6 +294,50 @@ func (x *TankChangePayload) GetY() uint32 {
 	return 0
 }
 
+type GameStatusPayload struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Tanks         []*datastruct.Tank     `protobuf:"bytes,1,rep,name=tanks,proto3" json:"tanks,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GameStatusPayload) Reset() {
+	*x = GameStatusPayload{}
+	mi := &file_payload_payload_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GameStatusPayload) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GameStatusPayload) ProtoMessage() {}
+
+func (x *GameStatusPayload) ProtoReflect() protoreflect.Message {
+	mi := &file_payload_payload_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GameStatusPayload.ProtoReflect.Descriptor instead.
+func (*GameStatusPayload) Descriptor() ([]byte, []int) {
+	return file_payload_payload_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *GameStatusPayload) GetTanks() []*datastruct.Tank {
+	if x != nil {
+		return x.Tanks
+	}
+	return nil
+}
+
 type RequestPayload struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Username      string                 `protobuf:"bytes,1,opt,name=username,proto3" json:"username,omitempty"`
@@ -196,7 +348,7 @@ type RequestPayload struct {
 
 func (x *RequestPayload) Reset() {
 	*x = RequestPayload{}
-	mi := &file_payload_payload_proto_msgTypes[3]
+	mi := &file_payload_payload_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -208,7 +360,7 @@ func (x *RequestPayload) String() string {
 func (*RequestPayload) ProtoMessage() {}
 
 func (x *RequestPayload) ProtoReflect() protoreflect.Message {
-	mi := &file_payload_payload_proto_msgTypes[3]
+	mi := &file_payload_payload_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -221,7 +373,7 @@ func (x *RequestPayload) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RequestPayload.ProtoReflect.Descriptor instead.
 func (*RequestPayload) Descriptor() ([]byte, []int) {
-	return file_payload_payload_proto_rawDescGZIP(), []int{3}
+	return file_payload_payload_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *RequestPayload) GetUsername() string {
@@ -248,7 +400,7 @@ type HitPayload struct {
 
 func (x *HitPayload) Reset() {
 	*x = HitPayload{}
-	mi := &file_payload_payload_proto_msgTypes[4]
+	mi := &file_payload_payload_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -260,7 +412,7 @@ func (x *HitPayload) String() string {
 func (*HitPayload) ProtoMessage() {}
 
 func (x *HitPayload) ProtoReflect() protoreflect.Message {
-	mi := &file_payload_payload_proto_msgTypes[4]
+	mi := &file_payload_payload_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -273,7 +425,7 @@ func (x *HitPayload) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HitPayload.ProtoReflect.Descriptor instead.
 func (*HitPayload) Descriptor() ([]byte, []int) {
-	return file_payload_payload_proto_rawDescGZIP(), []int{4}
+	return file_payload_payload_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *HitPayload) GetUsername() string {
@@ -303,7 +455,7 @@ type OperatePayload struct {
 
 func (x *OperatePayload) Reset() {
 	*x = OperatePayload{}
-	mi := &file_payload_payload_proto_msgTypes[5]
+	mi := &file_payload_payload_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -315,7 +467,7 @@ func (x *OperatePayload) String() string {
 func (*OperatePayload) ProtoMessage() {}
 
 func (x *OperatePayload) ProtoReflect() protoreflect.Message {
-	mi := &file_payload_payload_proto_msgTypes[5]
+	mi := &file_payload_payload_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -328,7 +480,7 @@ func (x *OperatePayload) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use OperatePayload.ProtoReflect.Descriptor instead.
 func (*OperatePayload) Descriptor() ([]byte, []int) {
-	return file_payload_payload_proto_rawDescGZIP(), []int{5}
+	return file_payload_payload_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *OperatePayload) GetUp() bool {
@@ -378,7 +530,7 @@ type ShotPayload struct {
 
 func (x *ShotPayload) Reset() {
 	*x = ShotPayload{}
-	mi := &file_payload_payload_proto_msgTypes[6]
+	mi := &file_payload_payload_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -390,7 +542,7 @@ func (x *ShotPayload) String() string {
 func (*ShotPayload) ProtoMessage() {}
 
 func (x *ShotPayload) ProtoReflect() protoreflect.Message {
-	mi := &file_payload_payload_proto_msgTypes[6]
+	mi := &file_payload_payload_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -403,7 +555,7 @@ func (x *ShotPayload) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ShotPayload.ProtoReflect.Descriptor instead.
 func (*ShotPayload) Descriptor() ([]byte, []int) {
-	return file_payload_payload_proto_rawDescGZIP(), []int{6}
+	return file_payload_payload_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *ShotPayload) GetUsername() string {
@@ -441,14 +593,26 @@ const file_payload_payload_proto_rawDesc = "" +
 	"\x15payload/payload.proto\x12\apayload\x1a\x1bdatastruct/datastruct.proto\"@\n" +
 	"\femojipayload\x12\x1a\n" +
 	"\busername\x18\x01 \x01(\tR\busername\x12\x14\n" +
-	"\x05emoji\x18\x02 \x01(\fR\x05emoji\"0\n" +
-	"\rblockspayload\x12\x1f\n" +
-	"\x01p\x18\x01 \x03(\v2\x11.datastruct.blockR\x01p\"c\n" +
+	"\x05emoji\x18\x02 \x01(\fR\x05emoji\"D\n" +
+	"\rblockspayload\x123\n" +
+	"\vblockpoints\x18\x01 \x03(\v2\x11.datastruct.blockR\vblockpoints\"\xbb\x02\n" +
+	"\x11gameConfigPayload\x12\x1a\n" +
+	"\bmapSizeX\x18\x01 \x01(\rR\bmapSizeX\x12\x1a\n" +
+	"\bmapSizeY\x18\x02 \x01(\rR\bmapSizeY\x12(\n" +
+	"\x03map\x18\x03 \x01(\v2\x16.payload.blockspayloadR\x03map\x12\"\n" +
+	"\ftickInterval\x18\x04 \x01(\x05R\ftickInterval\x12 \n" +
+	"\vmapRenderMS\x18\x05 \x01(\x05R\vmapRenderMS\x12\x1a\n" +
+	"\busername\x18\x06 \x01(\tR\busername\x12&\n" +
+	"\x05tanks\x18\a \x03(\v2\x10.datastruct.tankR\x05tanks\x12\x1c\n" +
+	"\ttankSizeX\x18\b \x01(\x05R\ttankSizeX\x12\x1c\n" +
+	"\ttankSizeY\x18\t \x01(\x05R\ttankSizeY\"c\n" +
 	"\x11tankChangePayload\x12\x1a\n" +
 	"\busername\x18\x01 \x01(\tR\busername\x12\x16\n" +
 	"\x06turnTo\x18\x02 \x01(\bR\x06turnTo\x12\f\n" +
 	"\x01x\x18\x03 \x01(\rR\x01x\x12\f\n" +
-	"\x01y\x18\x04 \x01(\rR\x01y\"F\n" +
+	"\x01y\x18\x04 \x01(\rR\x01y\";\n" +
+	"\x11gameStatusPayload\x12&\n" +
+	"\x05tanks\x18\x01 \x03(\v2\x10.datastruct.tankR\x05tanks\"F\n" +
 	"\x0erequestPayload\x12\x1a\n" +
 	"\busername\x18\x01 \x01(\tR\busername\x12\x18\n" +
 	"\asuccess\x18\x02 \x01(\bR\asuccess\"@\n" +
@@ -480,24 +644,30 @@ func file_payload_payload_proto_rawDescGZIP() []byte {
 	return file_payload_payload_proto_rawDescData
 }
 
-var file_payload_payload_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
+var file_payload_payload_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
 var file_payload_payload_proto_goTypes = []any{
 	(*Emojipayload)(nil),      // 0: payload.emojipayload
 	(*Blockspayload)(nil),     // 1: payload.blockspayload
-	(*TankChangePayload)(nil), // 2: payload.tankChangePayload
-	(*RequestPayload)(nil),    // 3: payload.requestPayload
-	(*HitPayload)(nil),        // 4: payload.hitPayload
-	(*OperatePayload)(nil),    // 5: payload.operatePayload
-	(*ShotPayload)(nil),       // 6: payload.shotPayload
-	(*datastruct.Block)(nil),  // 7: datastruct.block
+	(*GameConfigPayload)(nil), // 2: payload.gameConfigPayload
+	(*TankChangePayload)(nil), // 3: payload.tankChangePayload
+	(*GameStatusPayload)(nil), // 4: payload.gameStatusPayload
+	(*RequestPayload)(nil),    // 5: payload.requestPayload
+	(*HitPayload)(nil),        // 6: payload.hitPayload
+	(*OperatePayload)(nil),    // 7: payload.operatePayload
+	(*ShotPayload)(nil),       // 8: payload.shotPayload
+	(*datastruct.Block)(nil),  // 9: datastruct.block
+	(*datastruct.Tank)(nil),   // 10: datastruct.tank
 }
 var file_payload_payload_proto_depIdxs = []int32{
-	7, // 0: payload.blockspayload.p:type_name -> datastruct.block
-	1, // [1:1] is the sub-list for method output_type
-	1, // [1:1] is the sub-list for method input_type
-	1, // [1:1] is the sub-list for extension type_name
-	1, // [1:1] is the sub-list for extension extendee
-	0, // [0:1] is the sub-list for field type_name
+	9,  // 0: payload.blockspayload.blockpoints:type_name -> datastruct.block
+	1,  // 1: payload.gameConfigPayload.map:type_name -> payload.blockspayload
+	10, // 2: payload.gameConfigPayload.tanks:type_name -> datastruct.tank
+	10, // 3: payload.gameStatusPayload.tanks:type_name -> datastruct.tank
+	4,  // [4:4] is the sub-list for method output_type
+	4,  // [4:4] is the sub-list for method input_type
+	4,  // [4:4] is the sub-list for extension type_name
+	4,  // [4:4] is the sub-list for extension extendee
+	0,  // [0:4] is the sub-list for field type_name
 }
 
 func init() { file_payload_payload_proto_init() }
@@ -511,7 +681,7 @@ func file_payload_payload_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_payload_payload_proto_rawDesc), len(file_payload_payload_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   7,
+			NumMessages:   9,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

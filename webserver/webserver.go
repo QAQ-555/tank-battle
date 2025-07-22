@@ -9,6 +9,7 @@ import (
 
 	"example.com/lite_demo/model"
 	msgpack "example.com/lite_demo/test"
+	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 	"google.golang.org/protobuf/proto"
 )
@@ -35,13 +36,14 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 4. 等待客户端提交用户名
-	ok, username := waitForUsername(client)
-	if !ok {
-		log.Println("⏳ 超时或失败，未获取 username")
-		conn.Close() // 关闭连接，释放资源
-		return
-	}
-	log.Println("✅ 成功获取 username:", username)
+	// ok, username := waitForUsername(client)
+	// if !ok {
+	// 	log.Println("⏳ 超时或失败，未获取 username")
+	// 	conn.Close() // 关闭连接，释放资源
+	// 	return
+	// }
+	// log.Println("✅ 成功获取 username:", username)
+	username := uuid.New().String()
 	client.ID = username
 	model.ClientsMu.Lock()
 	model.Clients[username] = client
@@ -129,23 +131,40 @@ func handleClientMessages(client *model.Client) {
 			log.Printf("⚠️ Connection %s error: %v\n", client.ID, err)
 			break
 		}
+		emoji := &msgpack.MsgPack{}
+		err = proto.Unmarshal(msg, emoji)
+		if err == nil {
+			switch emoji.Type[0] {
+			case 1:
+				// 处理游戏状态通知
+				log.Printf("✅ Connection %s : %+v\n", client.ID, emoji.GetEmoji())
+				processEmojiPayload(emoji)
+			case 2:
+				// 处理游戏状态通知
+				log.Printf("✅ Connection %s : %+v\n", client.ID, emoji.GetEmoji())
+				processEmojiPayload(emoji)
+			default:
+				log.Printf("⚠️ unknow type %s : %+v\n", emoji.Type, emoji.GetPayload())
+			}
+		} else {
+			log.Printf("⚠️ not proto message : %v\n", err)
+			// 解析客户端发送的 JSON 消消息
+			_, _, payload, err := UnpackWebMessage(msg)
+			if err != nil {
+				log.Printf("❌ Failed to parse JSON from %s: %v", client.ID, err)
+				continue
+			}
 
-		// 解析客户端发送的 JSON 消消息
-		_, _, payload, err := UnpackWebMessage(msg)
-		if err != nil {
-			log.Printf("❌ Failed to parse JSON from %s: %v", client.ID, err)
-			continue
-		}
-
-		switch v := payload.(type) {
-		case model.OperatePayload:
-			processOperatePayload(client, v)
-		case model.HitPayload:
-			processHitPayload(v)
-		case model.RespawnPayload:
-			processRespawnPayload(v)
-		default:
-			log.Printf("⚠️ payload 不是 OperatePayload/HitPayload，而是：%T", payload)
+			switch v := payload.(type) {
+			case model.OperatePayload:
+				processOperatePayload(client, v)
+			case model.HitPayload:
+				processHitPayload(v)
+			case model.RespawnPayload:
+				processRespawnPayload(v)
+			default:
+				log.Printf("⚠️ payload 不是 OperatePayload/HitPayload，而是：%T", payload)
+			}
 		}
 	}
 }
@@ -527,4 +546,15 @@ func handleRegisterMessage(c *model.Client, msg []byte) (bool, string, error) {
 	c.WriteMutex.Unlock()
 
 	return false, "", nil
+}
+
+func processEmojiPayload(emoji *msgpack.MsgPack) {
+	log.Printf("✅ Connection	: %+v\n", emoji.GetEmoji())
+	emoji.Target = "board cast back"
+	data, err := proto.Marshal(emoji)
+	if err != nil {
+		log.Println("Failed to marshal emoji payload:", err)
+		return
+	}
+	broadcastToAllClients(data, "all")
 }

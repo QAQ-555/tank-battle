@@ -23,5 +23,9 @@ message tank{
     uint32 reload=3;
     bool trigger=4;
     bytes GunFacing=5;
-
+    bytes status=6;
+    bytes orientation=7;
+    string username=8;
+    int32 point=9;
 }
+

@@ -12,15 +12,30 @@ message emojipayload{
 }
 
 message blockspayload{
-    repeated datastruct.block p=1;
+    repeated datastruct.block blockpoints=1;
 }
 
+message  gameConfigPayload{
+    uint32 mapSizeX=1;
+    uint32 mapSizeY=2;
+    blockspayload map=3;
+    int32 tickInterval=4;
+    int32 mapRenderMS=5;
+    string username=6;
+    repeated datastruct.tank tanks=7;
+    int32 tankSizeX=8;
+    int32 tankSizeY=9;
+}
 
 message tankChangePayload{
     string username =1;
     bool turnTo=2;
     uint32 x=3;
     uint32 y=4;
+}
+
+message gameStatusPayload{
+    repeated datastruct.tank tanks=1;
 }
 
 message requestPayload{

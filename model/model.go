@@ -13,8 +13,8 @@ var FlagChan = make(chan bool)
 const (
 	MAP_SIZE_X          uint = 1542
 	MAP_SIZE_Y          uint = 512
-	TICK_INTERVAL_MS         = 50
-	MAP_RENDER_MS            = 50
+	TICK_INTERVAL_MS         = 5000
+	MAP_RENDER_MS            = 5000
 	WAIT_REPLY_TIME          = 60
 	TANK_RELOAD_SECONDS      = 3
 	BOCLK_LENTH              = 20 //must even

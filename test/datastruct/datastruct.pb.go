@@ -148,6 +148,10 @@ type Tank struct {
 	Reload        uint32                 `protobuf:"varint,3,opt,name=reload,proto3" json:"reload,omitempty"`
 	Trigger       bool                   `protobuf:"varint,4,opt,name=trigger,proto3" json:"trigger,omitempty"`
 	GunFacing     []byte                 `protobuf:"bytes,5,opt,name=GunFacing,proto3" json:"GunFacing,omitempty"`
+	Status        []byte                 `protobuf:"bytes,6,opt,name=status,proto3" json:"status,omitempty"`
+	Orientation   []byte                 `protobuf:"bytes,7,opt,name=orientation,proto3" json:"orientation,omitempty"`
+	Username      string                 `protobuf:"bytes,8,opt,name=username,proto3" json:"username,omitempty"`
+	Point         int32                  `protobuf:"varint,9,opt,name=point,proto3" json:"point,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -217,6 +221,34 @@ func (x *Tank) GetGunFacing() []byte {
 	return nil
 }
 
+func (x *Tank) GetStatus() []byte {
+	if x != nil {
+		return x.Status
+	}
+	return nil
+}
+
+func (x *Tank) GetOrientation() []byte {
+	if x != nil {
+		return x.Orientation
+	}
+	return nil
+}
+
+func (x *Tank) GetUsername() string {
+	if x != nil {
+		return x.Username
+	}
+	return ""
+}
+
+func (x *Tank) GetPoint() int32 {
+	if x != nil {
+		return x.Point
+	}
+	return 0
+}
+
 var File_datastruct_datastruct_proto protoreflect.FileDescriptor
 
 const file_datastruct_datastruct_proto_rawDesc = "" +
@@ -230,13 +262,17 @@ const file_datastruct_datastruct_proto_rawDesc = "" +
 	"\x01p\x18\x01 \x03(\v2\x14.datastruct.mappointR\x01p\x12\f\n" +
 	"\x01l\x18\x02 \x01(\x05R\x01l\x12\f\n" +
 	"\x01w\x18\x03 \x01(\x05R\x01w\x12\x10\n" +
-	"\x03dir\x18\x04 \x01(\fR\x03dir\"r\n" +
+	"\x03dir\x18\x04 \x01(\fR\x03dir\"\xde\x01\n" +
 	"\x04tank\x12\f\n" +
 	"\x01x\x18\x01 \x01(\rR\x01x\x12\f\n" +
 	"\x01y\x18\x02 \x01(\rR\x01y\x12\x16\n" +
 	"\x06reload\x18\x03 \x01(\rR\x06reload\x12\x18\n" +
 	"\atrigger\x18\x04 \x01(\bR\atrigger\x12\x1c\n" +
-	"\tGunFacing\x18\x05 \x01(\fR\tGunFacingB2Z0example.com/lite_demo/test/datastruct;datastructb\x06proto3"
+	"\tGunFacing\x18\x05 \x01(\fR\tGunFacing\x12\x16\n" +
+	"\x06status\x18\x06 \x01(\fR\x06status\x12 \n" +
+	"\vorientation\x18\a \x01(\fR\vorientation\x12\x1a\n" +
+	"\busername\x18\b \x01(\tR\busername\x12\x14\n" +
+	"\x05point\x18\t \x01(\x05R\x05pointB2Z0example.com/lite_demo/test/datastruct;datastructb\x06proto3"
 
 var (
 	file_datastruct_datastruct_proto_rawDescOnce sync.Once

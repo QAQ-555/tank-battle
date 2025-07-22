@@ -11,13 +11,14 @@ message MsgPack{
     bytes type = 1;
     string target = 2;
     oneof payload {
-        payload.emojipayload emoji = 3;
-        payload.blockspayload blocks = 4;
-        payload.tankChangePayload tankChange = 5;
-        payload.requestPayload request = 6;
-        payload.hitPayload hit = 7;
-        payload.operatePayload operate = 8;
-        payload.shotPayload shot = 9;
-        string notice=10;
+        payload.emojipayload emoji = 3; //type=8 and 19
+        payload.tankChangePayload tankChange = 5;//type = 5 
+        payload.requestPayload request = 6; //type =  16 18
+        payload.hitPayload hit = 7; // type = 17
+        payload.operatePayload operate = 8; //type= 15
+        payload.shotPayload shot = 9;// type = 3
+        string notice=10;// type = 0 4 
+        payload.gameConfigPayload gameConfig=11; //type = 1
+        payload.gameStatusPayload gameStatus=12; //type = 2
     }
 }

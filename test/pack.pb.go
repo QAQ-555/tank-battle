@@ -29,13 +29,14 @@ type MsgPack struct {
 	// Types that are valid to be assigned to Payload:
 	//
 	//	*MsgPack_Emoji
-	//	*MsgPack_Blocks
 	//	*MsgPack_TankChange
 	//	*MsgPack_Request
 	//	*MsgPack_Hit
 	//	*MsgPack_Operate
 	//	*MsgPack_Shot
 	//	*MsgPack_Notice
+	//	*MsgPack_GameConfig
+	//	*MsgPack_GameStatus
 	Payload       isMsgPack_Payload `protobuf_oneof:"payload"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -101,15 +102,6 @@ func (x *MsgPack) GetEmoji() *payload.Emojipayload {
 	return nil
 }
 
-func (x *MsgPack) GetBlocks() *payload.Blockspayload {
-	if x != nil {
-		if x, ok := x.Payload.(*MsgPack_Blocks); ok {
-			return x.Blocks
-		}
-	}
-	return nil
-}
-
 func (x *MsgPack) GetTankChange() *payload.TankChangePayload {
 	if x != nil {
 		if x, ok := x.Payload.(*MsgPack_TankChange); ok {
@@ -164,45 +156,65 @@ func (x *MsgPack) GetNotice() string {
 	return ""
 }
 
+func (x *MsgPack) GetGameConfig() *payload.GameConfigPayload {
+	if x != nil {
+		if x, ok := x.Payload.(*MsgPack_GameConfig); ok {
+			return x.GameConfig
+		}
+	}
+	return nil
+}
+
+func (x *MsgPack) GetGameStatus() *payload.GameStatusPayload {
+	if x != nil {
+		if x, ok := x.Payload.(*MsgPack_GameStatus); ok {
+			return x.GameStatus
+		}
+	}
+	return nil
+}
+
 type isMsgPack_Payload interface {
 	isMsgPack_Payload()
 }
 
 type MsgPack_Emoji struct {
-	Emoji *payload.Emojipayload `protobuf:"bytes,3,opt,name=emoji,proto3,oneof"`
-}
-
-type MsgPack_Blocks struct {
-	Blocks *payload.Blockspayload `protobuf:"bytes,4,opt,name=blocks,proto3,oneof"`
+	Emoji *payload.Emojipayload `protobuf:"bytes,3,opt,name=emoji,proto3,oneof"` //type=8 and 19
 }
 
 type MsgPack_TankChange struct {
-	TankChange *payload.TankChangePayload `protobuf:"bytes,5,opt,name=tankChange,proto3,oneof"`
+	TankChange *payload.TankChangePayload `protobuf:"bytes,5,opt,name=tankChange,proto3,oneof"` //type = 5
 }
 
 type MsgPack_Request struct {
-	Request *payload.RequestPayload `protobuf:"bytes,6,opt,name=request,proto3,oneof"`
+	Request *payload.RequestPayload `protobuf:"bytes,6,opt,name=request,proto3,oneof"` //type =  16 18
 }
 
 type MsgPack_Hit struct {
-	Hit *payload.HitPayload `protobuf:"bytes,7,opt,name=hit,proto3,oneof"`
+	Hit *payload.HitPayload `protobuf:"bytes,7,opt,name=hit,proto3,oneof"` // type = 17
 }
 
 type MsgPack_Operate struct {
-	Operate *payload.OperatePayload `protobuf:"bytes,8,opt,name=operate,proto3,oneof"`
+	Operate *payload.OperatePayload `protobuf:"bytes,8,opt,name=operate,proto3,oneof"` //type= 15
 }
 
 type MsgPack_Shot struct {
-	Shot *payload.ShotPayload `protobuf:"bytes,9,opt,name=shot,proto3,oneof"`
+	Shot *payload.ShotPayload `protobuf:"bytes,9,opt,name=shot,proto3,oneof"` // type = 3
 }
 
 type MsgPack_Notice struct {
-	Notice string `protobuf:"bytes,10,opt,name=notice,proto3,oneof"`
+	Notice string `protobuf:"bytes,10,opt,name=notice,proto3,oneof"` // type = 0 4
+}
+
+type MsgPack_GameConfig struct {
+	GameConfig *payload.GameConfigPayload `protobuf:"bytes,11,opt,name=gameConfig,proto3,oneof"` //type = 1
+}
+
+type MsgPack_GameStatus struct {
+	GameStatus *payload.GameStatusPayload `protobuf:"bytes,12,opt,name=gameStatus,proto3,oneof"` //type = 2
 }
 
 func (*MsgPack_Emoji) isMsgPack_Payload() {}
-
-func (*MsgPack_Blocks) isMsgPack_Payload() {}
 
 func (*MsgPack_TankChange) isMsgPack_Payload() {}
 
@@ -216,17 +228,20 @@ func (*MsgPack_Shot) isMsgPack_Payload() {}
 
 func (*MsgPack_Notice) isMsgPack_Payload() {}
 
+func (*MsgPack_GameConfig) isMsgPack_Payload() {}
+
+func (*MsgPack_GameStatus) isMsgPack_Payload() {}
+
 var File_pack_proto protoreflect.FileDescriptor
 
 const file_pack_proto_rawDesc = "" +
 	"\n" +
 	"\n" +
-	"pack.proto\x12\amsgpack\x1a\x15payload/payload.proto\"\xb8\x03\n" +
+	"pack.proto\x12\amsgpack\x1a\x15payload/payload.proto\"\x82\x04\n" +
 	"\aMsgPack\x12\x12\n" +
 	"\x04type\x18\x01 \x01(\fR\x04type\x12\x16\n" +
 	"\x06target\x18\x02 \x01(\tR\x06target\x12-\n" +
-	"\x05emoji\x18\x03 \x01(\v2\x15.payload.emojipayloadH\x00R\x05emoji\x120\n" +
-	"\x06blocks\x18\x04 \x01(\v2\x16.payload.blockspayloadH\x00R\x06blocks\x12<\n" +
+	"\x05emoji\x18\x03 \x01(\v2\x15.payload.emojipayloadH\x00R\x05emoji\x12<\n" +
 	"\n" +
 	"tankChange\x18\x05 \x01(\v2\x1a.payload.tankChangePayloadH\x00R\n" +
 	"tankChange\x123\n" +
@@ -235,7 +250,13 @@ const file_pack_proto_rawDesc = "" +
 	"\aoperate\x18\b \x01(\v2\x17.payload.operatePayloadH\x00R\aoperate\x12*\n" +
 	"\x04shot\x18\t \x01(\v2\x14.payload.shotPayloadH\x00R\x04shot\x12\x18\n" +
 	"\x06notice\x18\n" +
-	" \x01(\tH\x00R\x06noticeB\t\n" +
+	" \x01(\tH\x00R\x06notice\x12<\n" +
+	"\n" +
+	"gameConfig\x18\v \x01(\v2\x1a.payload.gameConfigPayloadH\x00R\n" +
+	"gameConfig\x12<\n" +
+	"\n" +
+	"gameStatus\x18\f \x01(\v2\x1a.payload.gameStatusPayloadH\x00R\n" +
+	"gameStatusB\t\n" +
 	"\apayloadB$Z\"example.com/lite_demo/test;msgpackb\x06proto3"
 
 var (
@@ -254,26 +275,28 @@ var file_pack_proto_msgTypes = make([]protoimpl.MessageInfo, 1)
 var file_pack_proto_goTypes = []any{
 	(*MsgPack)(nil),                   // 0: msgpack.MsgPack
 	(*payload.Emojipayload)(nil),      // 1: payload.emojipayload
-	(*payload.Blockspayload)(nil),     // 2: payload.blockspayload
-	(*payload.TankChangePayload)(nil), // 3: payload.tankChangePayload
-	(*payload.RequestPayload)(nil),    // 4: payload.requestPayload
-	(*payload.HitPayload)(nil),        // 5: payload.hitPayload
-	(*payload.OperatePayload)(nil),    // 6: payload.operatePayload
-	(*payload.ShotPayload)(nil),       // 7: payload.shotPayload
+	(*payload.TankChangePayload)(nil), // 2: payload.tankChangePayload
+	(*payload.RequestPayload)(nil),    // 3: payload.requestPayload
+	(*payload.HitPayload)(nil),        // 4: payload.hitPayload
+	(*payload.OperatePayload)(nil),    // 5: payload.operatePayload
+	(*payload.ShotPayload)(nil),       // 6: payload.shotPayload
+	(*payload.GameConfigPayload)(nil), // 7: payload.gameConfigPayload
+	(*payload.GameStatusPayload)(nil), // 8: payload.gameStatusPayload
 }
 var file_pack_proto_depIdxs = []int32{
 	1, // 0: msgpack.MsgPack.emoji:type_name -> payload.emojipayload
-	2, // 1: msgpack.MsgPack.blocks:type_name -> payload.blockspayload
-	3, // 2: msgpack.MsgPack.tankChange:type_name -> payload.tankChangePayload
-	4, // 3: msgpack.MsgPack.request:type_name -> payload.requestPayload
-	5, // 4: msgpack.MsgPack.hit:type_name -> payload.hitPayload
-	6, // 5: msgpack.MsgPack.operate:type_name -> payload.operatePayload
-	7, // 6: msgpack.MsgPack.shot:type_name -> payload.shotPayload
-	7, // [7:7] is the sub-list for method output_type
-	7, // [7:7] is the sub-list for method input_type
-	7, // [7:7] is the sub-list for extension type_name
-	7, // [7:7] is the sub-list for extension extendee
-	0, // [0:7] is the sub-list for field type_name
+	2, // 1: msgpack.MsgPack.tankChange:type_name -> payload.tankChangePayload
+	3, // 2: msgpack.MsgPack.request:type_name -> payload.requestPayload
+	4, // 3: msgpack.MsgPack.hit:type_name -> payload.hitPayload
+	5, // 4: msgpack.MsgPack.operate:type_name -> payload.operatePayload
+	6, // 5: msgpack.MsgPack.shot:type_name -> payload.shotPayload
+	7, // 6: msgpack.MsgPack.gameConfig:type_name -> payload.gameConfigPayload
+	8, // 7: msgpack.MsgPack.gameStatus:type_name -> payload.gameStatusPayload
+	8, // [8:8] is the sub-list for method output_type
+	8, // [8:8] is the sub-list for method input_type
+	8, // [8:8] is the sub-list for extension type_name
+	8, // [8:8] is the sub-list for extension extendee
+	0, // [0:8] is the sub-list for field type_name
 }
 
 func init() { file_pack_proto_init() }
@@ -283,13 +306,14 @@ func file_pack_proto_init() {
 	}
 	file_pack_proto_msgTypes[0].OneofWrappers = []any{
 		(*MsgPack_Emoji)(nil),
-		(*MsgPack_Blocks)(nil),
 		(*MsgPack_TankChange)(nil),
 		(*MsgPack_Request)(nil),
 		(*MsgPack_Hit)(nil),
 		(*MsgPack_Operate)(nil),
 		(*MsgPack_Shot)(nil),
 		(*MsgPack_Notice)(nil),
+		(*MsgPack_GameConfig)(nil),
+		(*MsgPack_GameStatus)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
