@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Proto 消息生成工具</title>
+    <script src="https://cdn.jsdelivr.net/npm/protobufjs@6.11.2/dist/protobuf.min.js"></script>
+    <style>
+        .container {
+            max-width: 800px;
+            margin: 20px auto;
+            padding: 20px;
+        }
+        #messageType {
+            margin-bottom: 20px;
+            padding: 8px;
+            font-size: 16px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <select id="messageType" onchange="generateTable()">
+            <option value="">请选择消息类型</option>
+        </select>
+        <div id="tableContainer"></div>
+    </div>
+    <script src="main.js"></script>
+</body>
+</html>

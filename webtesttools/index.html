@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <title>坦克大战消息交互工具</title>
+    <script src="https://cdn.jsdelivr.net/npm/protobufjs@7.2.4/dist/protobuf.min.js"></script>
+    <script src="script.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 5px;
+        }
+
+        #receivedMessages,
+        #sentMessageParsed {
+            margin-top: 20px;
+            border: 1px solid #ccc;
+            padding: 10px;
+            /* 适当增大最大高度 */
+            max-height: 500px; 
+            overflow-y: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+
+        th,
+        td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+
+        th {
+            background-color: #f2f2f2;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>proto test tool</h1>
+    <div class="form-group">
+        <label for="serverUrl">服务器地址:</label>
+        <input type="text" id="serverUrl" value="ws://localhost:8885/ws">
+        <button onclick="connectToServer()">连接</button>
+    </div>
+
+    <div class="container">
+        <select id="messageType" onchange="generateTable()">
+            <option value="">请选择消息类型</option>
+        </select>
+        <div class="form-group">
+            <label for="typeInput">Type 字段值 (0 - 255):</label>
+            <input type="text" id="typeInput" value="1">
+        </div>
+        <div id="tableContainer"></div>
+    </div>
+
+    <button onclick="sendMessage()">发送消息</button>
+
+    <div id="receivedMessages">
+        <h2>接收到的消息</h2>
+        <pre id="messageContent"></pre>
+    </div>
+</body>
+
+</html>

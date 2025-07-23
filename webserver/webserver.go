@@ -35,16 +35,25 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		log.Println("Failed to marshal notice payload:", err)
 		return
 	}
+	debug := true
+	username := ""
+	//4. 等待客户端提交用户名
+	if debug {
+		username = uuid.NewString()
+	} else {
+		ok, username := waitForUsername(client)
+		if !ok {
+			log.Println("⏳ 超时或失败，未获取 username")
+			conn.Close() // 关闭连接，释放资源
+			return
+		}
+		log.Println("✅ 成功获取 username:", username)
+		// username := uuid.New().String()
+		client.ID = username
+	}
 
-	// 4. 等待客户端提交用户名
-	// ok, username := waitForUsername(client)
-	// if !ok {
-	// 	log.Println("⏳ 超时或失败，未获取 username")
-	// 	conn.Close() // 关闭连接，释放资源
-	// 	return
-	// }
-	// log.Println("✅ 成功获取 username:", username)
-	username := uuid.New().String()
+	log.Println("✅ 成功获取 username:", username)
+	// username := uuid.New().String()
 	client.ID = username
 	model.ClientsMu.Lock()
 	model.Clients[username] = client
@@ -136,19 +145,26 @@ func handleClientMessages(client *model.Client) {
 		}
 		protoMsg := &msgpack.MsgPack{}
 		err = proto.Unmarshal(msg, protoMsg)
+		// 打印调试信息
+		log.Printf("Received message: %+v\n", protoMsg)
+
 		if err == nil {
+			if protoMsg.GetType() == nil {
+				log.Printf("⚠️ Connection %s message is nil/err\n", client.ID)
+				continue
+			}
 			switch protoMsg.Type[0] {
-			case model.TypeEmojiC:
+			case model.TypeEmojiS:
 				// 处理表情
 				if protoMsg.GetEmoji() == nil {
-					log.Printf("⚠️ Connection %s message is nil/err\n", client.ID)
+					log.Printf("⚠️ TypeEmojiS Connection %s message is nil/err\n", client.ID)
 					continue
 				}
 				processEmojiPayload(protoMsg)
-			case model.TypeHitEvent:
-				// 处理击中活动
+			case model.TypeHitNotice:
+				// 处理击中通知
 				if protoMsg.GetHit() == nil {
-					log.Printf("⚠️ Connection %s message is nil/err\n", client.ID)
+					log.Printf("⚠️ TypeHitNotice Connection %s message is nil/err\n", client.ID)
 					continue
 				}
 				hp := model.HitPayload{
@@ -159,7 +175,7 @@ func handleClientMessages(client *model.Client) {
 			case model.TypeTankOperation:
 				// 处理坦克操作指令
 				if protoMsg.GetOperate() == nil {
-					log.Printf("⚠️ Connection %s message is nil/err\n", client.ID)
+					log.Printf("⚠️ TypeTankOperation Connection %s message is nil/err\n", client.ID)
 					continue
 				}
 				op := model.OperatePayload{
@@ -172,7 +188,7 @@ func handleClientMessages(client *model.Client) {
 				processOperatePayload(client, op)
 			case model.TypeRespawnRequest:
 				if protoMsg.GetRequest() == nil {
-					log.Printf("⚠️ Connection %s message is nil/err\n", client.ID)
+					log.Printf("⚠️  TypeRespawnRequest Connection %s message is nil/err\n", client.ID)
 					continue
 				}
 				rp := model.RespawnPayload{
@@ -208,6 +224,7 @@ func handleClientMessages(client *model.Client) {
 
 // 处理坦克操作指令
 func processOperatePayload(client *model.Client, op model.OperatePayload) {
+	log.Printf("processOperatePayload %+v", op)
 	moveDir := parseDirection(op.Up, op.Down, op.Left, op.Right)
 	client.LastActive = time.Now()
 	client.Tank.Orientation = moveDir
@@ -443,7 +460,6 @@ func SendConfig(c *model.Client) {
 		}
 		configProto.Payload.(*msgpack.MsgPack_GameConfig).GameConfig.Map.Blockpoints = append(configProto.Payload.(*msgpack.MsgPack_GameConfig).GameConfig.Map.Blockpoints, tmp)
 	}
-	fmt.Printf("%+v", configProto)
 	data, err := proto.Marshal(&configProto)
 	if err != nil {
 		log.Println("Failed to marshal game state:", err)
@@ -584,6 +600,7 @@ func waitForUsername(c *model.Client) (bool, string) {
 
 		case msg := <-msgCh:
 			// log.Println("[WaitForCondition] 从 msgCh 收到:", string(msg))
+			log.Printf("waitForUsername")
 			readNext, username, err := handleRegisterMessage(c, msg)
 			// log.Println("[WaitForCondition] processMessage 返回:", readNext, username, err)
 
@@ -609,7 +626,10 @@ func handleRegisterMessage(c *model.Client, msg []byte) (bool, string, error) {
 	protoMsg := &msgpack.MsgPack{}
 	err := proto.Unmarshal(msg, protoMsg)
 	if err == nil {
-		if protoMsg.GetType()[0] == model.TypeRegisterRequest {
+		log.Printf("prorobuf side %+v", protoMsg)
+
+		log.Printf("%d", protoMsg.GetType()[0])
+		if protoMsg.GetType()[0] != model.TypeRegisterRequest {
 			return false, "", nil
 		}
 		if protoMsg.GetRequest() == nil {
@@ -617,12 +637,13 @@ func handleRegisterMessage(c *model.Client, msg []byte) (bool, string, error) {
 		}
 
 		if protoMsg.GetRequest().Success && isUsernameLegal(protoMsg.GetRequest().Username) {
+			log.Printf("username is legal")
 			model.UsernameMu.Lock()
 			model.Usernames = append(model.Usernames, protoMsg.GetRequest().Username)
 			model.UsernameMu.Unlock()
 			return true, protoMsg.GetRequest().Username, nil
 		}
-
+		log.Printf("username is empty or already exists")
 		msgpr := &msgpack.MsgPack{
 			Type:   []byte{model.TypeErrorNotice},
 			Target: c.ID,
@@ -643,6 +664,7 @@ func handleRegisterMessage(c *model.Client, msg []byte) (bool, string, error) {
 
 		return false, "", nil
 	} else {
+		log.Printf("json side")
 		_, _, payload, err := UnpackWebMessage(msg)
 		if err != nil {
 			return false, "", fmt.Errorf("failed to parse message: %w", err)
